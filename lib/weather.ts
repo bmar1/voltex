@@ -1,4 +1,5 @@
 import type { Coordinates, WeatherSnapshot } from "./types";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const ENDPOINT = "https://api.weather.gc.ca/collections/citypageweather-realtime/items";
 
@@ -72,7 +73,7 @@ export async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot
   };
 
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetchWithTimeout(url, { cache: "no-store" }, 8_000);
     if (!res.ok) throw new Error(`Weather request failed (${res.status})`);
     const body = (await res.json()) as { features?: CityPageFeature[] };
     const features = body.features ?? [];

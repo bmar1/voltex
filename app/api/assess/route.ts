@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const geo = await geocode(location);
     const weather = await fetchWeather(geo.coordinates);
     const scored = await score(geo.coordinates, weather, geo.fsa);
-    const llm_narrative = await generateNarrative({
+    const narrative = await generateNarrative({
       location: geo.displayName,
       risk_score: scored.risk_score,
       risk_tier: scored.risk_tier,
@@ -41,7 +41,8 @@ export async function POST(req: Request) {
       risk_tier: scored.risk_tier,
       factors: scored.factors,
       storm_context: scored.storm_context,
-      llm_narrative,
+      llm_narrative: narrative.text,
+      llm_source: narrative.source,
       weather,
       generated_at: new Date().toISOString(),
     };

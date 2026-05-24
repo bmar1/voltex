@@ -48,6 +48,30 @@ export interface AssessResponse {
   factors: RiskFactors;
   storm_context: string;
   llm_narrative: string;
+  llm_source: "gemini" | "local";
   weather: WeatherSnapshot;
+  generated_at: string;
+}
+
+/**
+ * Lightweight per-city result returned by /api/assess-batch.
+ * Does not include the LLM narrative — that is fetched lazily by the
+ * detail panel via the full /api/assess endpoint.
+ */
+export interface SlimAssessResult {
+  name: string;
+  label: string;
+  coordinates: Coordinates;
+  risk_score: number;
+  risk_tier: RiskTier;
+  factors: RiskFactors;
+  storm_context: string;
+  weather: WeatherSnapshot;
+  generated_at: string;
+}
+
+export interface BatchAssessResponse {
+  results: SlimAssessResult[];
+  errors: { name: string; message: string }[];
   generated_at: string;
 }

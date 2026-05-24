@@ -1,4 +1,5 @@
 import type { GeocodeResult } from "./types";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
@@ -10,13 +11,13 @@ export async function geocode(query: string): Promise<GeocodeResult> {
   url.searchParams.set("limit", "1");
   url.searchParams.set("countrycodes", "ca");
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: {
       "User-Agent": "GridGuard/0.1 (demo; storm outage risk predictor)",
       "Accept-Language": "en",
     },
     cache: "no-store",
-  });
+  }, 8_000);
 
   if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
   const body = (await res.json()) as Array<{

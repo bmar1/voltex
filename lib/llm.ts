@@ -1,9 +1,30 @@
 import type { AssessResponse } from "./types";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
-const SYSTEM_PROMPT = `You are a utility grid operations assistant. You will receive a structured outage risk assessment for a specific zone in Ontario, Canada. Generate a concise, professional plain-language summary (3-5 sentences) describing the risk level, the primary contributing factors, and 2-3 specific recommended utility actions. Write for a utility operations supervisor, not a general audience.`;
+const SYSTEM_PROMPT = `You are a utility grid operations analyst writing an outage-risk situation report for an Ontario distribution utility control room.
+
+Output a SITREP for the control-room supervisor. Use these four labeled blocks, in this exact order, each on its own line:
+
+POSTURE: one sentence stating the risk tier and the single most important driver. Reference the location by name.
+DRIVERS:
+- bullet naming a top contributing factor with its numeric value (e.g., wind 48 km/h, canopy 1.2 trees/cell)
+- bullet naming the second factor with its numeric value
+- bullet naming the third factor with its numeric value (optional)
+ACTIONS:
+- concrete operational step appropriate to the tier (crews, feeders, alerts, monitoring)
+- second concrete operational step
+- third concrete operational step (optional)
+WATCH: one sentence naming a specific threshold or change in the next 6 hours that would escalate or de-escalate posture.
+
+Rules:
+- Every bullet line MUST start with "- " (hyphen + space). No other bullet characters.
+- Use plain text only. NEVER use markdown formatting (no **, no #, no backticks, no italics).
+- The block labels POSTURE, DRIVERS, ACTIONS, WATCH must appear exactly as written, uppercase, followed by a colon.
+- Each ACTION must be specific. Do NOT write filler like "continue monitoring" or "maintain posture" without a target — name the feeder type, the crew action, the alert audience, or the metric.
+- Total length under 160 words. No preamble. No closing remarks.`;
 
 interface NarrativePayload {
   location: string;
@@ -13,9 +34,14 @@ interface NarrativePayload {
   factors: AssessResponse["factors"];
 }
 
-export async function generateNarrative(payload: NarrativePayload): Promise<string> {
+export interface NarrativeResult {
+  text: string;
+  source: "gemini" | "local";
+}
+
+export async function generateNarrative(payload: NarrativePayload): Promise<NarrativeResult> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return localNarrative(payload);
+  if (!key) return { text: localNarrative(payload), source: "local" };
 
   const userPrompt = JSON.stringify(
     {
@@ -35,24 +61,37 @@ export async function generateNarrative(payload: NarrativePayload): Promise<stri
   );
 
   try {
-    const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
-      }),
-    });
+    const res = await fetchWithTimeout(
+      `${ENDPOINT}?key=${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 800,
+            // gemini-2.5-flash is a thinking model and counts reasoning tokens
+            // against maxOutputTokens. Disabling the thinking budget keeps the
+            // response from being truncated mid-sentence.
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }),
+      },
+      12_000,
+    );
     if (!res.ok) throw new Error(`Gemini ${res.status}`);
     const body = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
-    return text.trim() || localNarrative(payload);
+    const trimmed = text.trim();
+    if (!trimmed) return { text: localNarrative(payload), source: "local" };
+    return { text: trimmed, source: "gemini" };
   } catch {
-    return localNarrative(payload);
+    return { text: localNarrative(payload), source: "local" };
   }
 }
 

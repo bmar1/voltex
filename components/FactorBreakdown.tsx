@@ -56,23 +56,23 @@ export function FactorBreakdown({ factors }: FactorBreakdownProps) {
           className={`gg-card gg-enter gg-enter-${i + 1} p-4`}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-white/70">
-              <span className="text-white/40">{ICONS[item.key]}</span>
+            <div className="flex items-center gap-2 text-sm text-[var(--paper-dim)]">
+              <span className="text-[var(--muted)]">{ICONS[item.key]}</span>
               {item.factor.label}
             </div>
-            <span className="font-mono text-xs text-white/40">
+            <span className="font-mono text-xs text-[var(--muted)]">
               w {pct(item.factor.weight)}
             </span>
           </div>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="font-mono text-2xl tabular-nums">
+            <span className="font-mono text-2xl tabular-nums text-[var(--paper)]">
               {item.factor.normalized.toFixed(2)}
             </span>
-            <span className="font-mono text-xs text-white/40">
+            <span className="font-mono text-xs text-[var(--muted)]">
               +{item.factor.contribution.toFixed(2)} to score
             </span>
           </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
             <div
               className="h-full rounded-full"
               style={{
@@ -82,12 +82,12 @@ export function FactorBreakdown({ factors }: FactorBreakdownProps) {
                     ? "var(--risk-high)"
                     : item.factor.normalized > 0.4
                       ? "var(--risk-medium)"
-                      : "var(--accent)",
+                      : "var(--risk-low)",
                 transition: "width 600ms var(--ease-out)",
               }}
             />
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-white/50">{item.factor.detail}</p>
+          <p className="mt-3 text-xs leading-relaxed text-[var(--paper-dim)]">{item.factor.detail}</p>
         </div>
       ))}
     </div>

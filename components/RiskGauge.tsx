@@ -44,7 +44,7 @@ export function RiskGauge({ score, tier }: RiskGaugeProps) {
             cx="80"
             cy="80"
             r={radius}
-            stroke="rgba(255,255,255,0.06)"
+            stroke="var(--surface-strong)"
             strokeWidth="12"
             fill="none"
           />
@@ -65,11 +65,11 @@ export function RiskGauge({ score, tier }: RiskGaugeProps) {
           <span className="font-mono text-3xl font-semibold tracking-tight">
             {animated.toFixed(2)}
           </span>
-          <span className="text-xs uppercase tracking-[0.18em] text-white/40">/ 1.00</span>
+          <span className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">/ 1.00</span>
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs uppercase tracking-[0.18em] text-white/40">Risk tier</span>
+        <span className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Risk tier</span>
         <span
           className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium"
           style={{ borderColor: color, color }}
@@ -80,7 +80,7 @@ export function RiskGauge({ score, tier }: RiskGaugeProps) {
           />
           {tier}
         </span>
-        <p className="mt-2 max-w-xs text-sm text-white/60">
+        <p className="mt-2 max-w-xs text-sm text-[var(--paper-dim)]">
           Weighted score across wind, canopy, flood exposure and recent outage history.
         </p>
       </div>
