@@ -16,9 +16,18 @@ const geistMono = Geist_Mono({
 const siteDescription =
   "Voltex maps storm outage risk across Ontario on an H3 hex grid. Live wind, tree cover, flood exposure, and outage history roll up into zone scores and operator briefs for utility crews.";
 
+const PRODUCTION_SITE = "https://voltex-eight.vercel.app";
+
+/** Canonical origin for OG/Twitter images. Must be publicly reachable (not a locked preview URL). */
 function siteUrl(): URL {
   if (process.env.NEXT_PUBLIC_SITE_URL) {
     return new URL(process.env.NEXT_PUBLIC_SITE_URL);
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return new URL(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+  }
+  if (process.env.NODE_ENV === "production") {
+    return new URL(PRODUCTION_SITE);
   }
   if (process.env.VERCEL_URL) {
     return new URL(`https://${process.env.VERCEL_URL}`);
@@ -41,23 +50,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_CA",
+    url: "/",
     siteName: "Voltex",
     title: "Voltex | Ontario Storm Outage Risk",
     description: siteDescription,
-    images: [
-      {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "Voltex logo and tagline",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Voltex | Ontario Storm Outage Risk",
     description: siteDescription,
-    images: ["/opengraph-image"],
   },
 };
 
