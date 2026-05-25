@@ -54,11 +54,21 @@ export const metadata: Metadata = {
     siteName: "Voltex",
     title: "Voltex | Ontario Storm Outage Risk",
     description: siteDescription,
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Voltex storm outage risk map for Ontario",
+        type: "image/png",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Voltex | Ontario Storm Outage Risk",
     description: siteDescription,
+    images: ["/og-image.png"],
   },
 };
 
