@@ -16,8 +16,6 @@ Transparent, weighted storm-risk scoring for Ontario distribution operators — 
 
 </div>
 
-> **The mark.** A hexagonal shield with an electric-blue lightning bolt — grid protection and storm energy in one geometric mark. Accent blue is reserved for live signals and the assessed zone.
-
 ---
 
 ## Overview
