@@ -37,6 +37,15 @@ export interface RiskFactors {
   canopy: FactorScore;
   flood: FactorScore;
   history: FactorScore;
+  weatherHistory: FactorScore;
+}
+
+/** Hex zone geometry for map rendering. */
+export interface HexZone {
+  h3Index: string;
+  center: Coordinates;
+  boundary: [number, number][];
+  region: string;
 }
 
 export interface AssessResponse {
@@ -51,6 +60,12 @@ export interface AssessResponse {
   llm_source: "gemini" | "local";
   weather: WeatherSnapshot;
   generated_at: string;
+  zone?: {
+    h3Index: string;
+    zone_risk_score: number;
+    zone_risk_tier: RiskTier;
+    region: string;
+  };
 }
 
 /**
@@ -73,5 +88,30 @@ export interface SlimAssessResult {
 export interface BatchAssessResponse {
   results: SlimAssessResult[];
   errors: { name: string; message: string }[];
+  generated_at: string;
+}
+
+/** Per-zone risk result returned by /api/assess-zones. */
+export interface ZoneRiskResult {
+  h3Index: string;
+  center: Coordinates;
+  boundary: [number, number][];
+  risk_score: number;
+  risk_tier: RiskTier;
+  factors: RiskFactors;
+  storm_context: string;
+  region: string;
+  zone_label: string;
+}
+
+export interface ZoneBatchResponse {
+  zones: ZoneRiskResult[];
+  summary: {
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+    peak_zone: string;
+    peak_score: number;
+  };
   generated_at: string;
 }
