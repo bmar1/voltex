@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateNarrative } from "@/lib/llm";
 import type { RiskFactors, RiskTier } from "@/lib/types";
+import type { WeatherHistoryEntry } from "@/lib/datasets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ interface NarrativeBody {
   risk_tier?: RiskTier;
   storm_context?: string;
   factors?: RiskFactors;
+  zoneHistory?: WeatherHistoryEntry;
+  neighboringZones?: Array<{ label: string; tier: string }>;
 }
 
 export async function POST(req: Request) {
@@ -21,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const { location, risk_score, risk_tier, storm_context, factors } = body;
+  const { location, risk_score, risk_tier, storm_context, factors, zoneHistory, neighboringZones } = body;
   if (!location || risk_score === undefined || !risk_tier || !storm_context || !factors) {
     return NextResponse.json(
       { error: "location, risk_score, risk_tier, storm_context, and factors are required" },
@@ -36,6 +39,8 @@ export async function POST(req: Request) {
       risk_tier,
       storm_context,
       factors,
+      zoneHistory,
+      neighboringZones,
     });
     return NextResponse.json({
       text: narrative.text,

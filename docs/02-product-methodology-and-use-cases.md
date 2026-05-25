@@ -1,4 +1,4 @@
-﻿# Product Methodology and Use Cases
+# Product Methodology and Use Cases
 
 This document explains what GridGuard does from the operator's point of view, why each signal exists, and how the output should be interpreted.
 
@@ -6,12 +6,14 @@ This document explains what GridGuard does from the operator's point of view, wh
 
 GridGuard helps an Ontario utility operator move from reactive outage response to proactive storm posture. It does not claim to know exactly which customer will lose power. Instead, it highlights zones where public risk signals suggest higher outage likelihood and explains what is driving that signal.
 
+The system divides Ontario into **673 H3 hexagonal zones** (~22 km each), scores each zone using a 5-factor model (live weather, vegetation density, flood exposure, outage history, and historical severe weather patterns), and presents the results as an interactive choropleth map alongside monitored city pins.
+
 The product value is the combination of:
 
-- Province-wide visual scan.
-- Drill-down for one monitored or searched location.
-- Transparent factor breakdown.
-- Structured operator briefing.
+- Province-wide **zone-level visual scan** — hexagons colored green → amber → red.
+- Drill-down for one zone or searched location.
+- Transparent **5-factor breakdown**.
+- Structured **operator briefing** with zone history context.
 
 ## Primary Users
 
@@ -51,23 +53,29 @@ Typical questions:
 mindmap
   root((GridGuard use cases))
     Storm watch
-      Scan Ontario map
-      Find highest-risk monitored city
-      Open operator briefing
+      Scan zone choropleth map
+      Find highest-risk zones and cities
+      Open zone or city operator briefing
+    Zone assessment
+      Click any hex zone on the map
+      View weather history profile
+      Inspect cities within the zone
     Local assessment
       Search address or postal code
       Add custom pin
-      Compare with nearby cities
+      Compare with nearby cities and zone context
     Crew readiness
-      Identify high-risk drivers
-      Pre-stage crews
+      Identify high-risk zone drivers
+      Pre-stage crews in elevated zones
       Verify backup feeder readiness
     Public safety
       Watch high wind and flood exposure
+      Identify derecho and tornado corridors
       Draft alerts
       Monitor escalation thresholds
     Planning
-      Inspect recurring exposure
+      Inspect recurring exposure by zone
+      Review historical severe weather patterns
       Prioritize better utility data
       Validate model assumptions
 ```
@@ -172,10 +180,11 @@ Signals:
 - Vegetation/canopy density: proxy for tree-line interaction risk.
 - Flood exposure: proxy for access and infrastructure vulnerability.
 - Outage-history proxy: public 311 and provincial reliability-style estimates where available.
+- Historical severe weather: 20-year zone-level patterns including tornado events, ice storms, high wind events, severe thunderstorms, and derecho corridor exposure.
 
 ### 4. Score transparently
 
-Every factor is normalized to `0..1`, multiplied by a fixed weight, and summed. The UI exposes raw value, normalized value, weight, contribution, and detail text.
+Every factor is normalized to `0..1`, multiplied by a fixed weight, and summed. The UI exposes raw value, normalized value, weight, contribution, and detail text for all **5 factors**.
 
 ```mermaid
 flowchart TB
@@ -231,6 +240,7 @@ Recommended operator stance:
 Typical meaning:
 
 - Strong weather signal plus local vulnerability, or one extreme exposure factor.
+- Zone may sit in a known severe weather corridor (tornado alley, derecho path, ice storm zone).
 - Conditions justify proactive response planning.
 
 Recommended operator stance:
@@ -239,6 +249,7 @@ Recommended operator stance:
 - Verify critical feeders, backup routes, and restoration staging.
 - Consider targeted public alerts.
 - Monitor watch thresholds closely.
+- Reference zone weather history for context on recurring patterns.
 
 ## What GridGuard Is Not
 

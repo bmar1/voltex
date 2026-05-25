@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 
 type Theme = "dark" | "light";
 
-const STORAGE_KEY = "gg-theme";
+const STORAGE_KEY = "vx-theme";
 
 const THEME_COLOR: Record<Theme, string> = {
-  dark: "#24221b",
-  light: "#ddd2bc",
+  dark: "#101216",
+  light: "#F0F2F5",
 };
 
 function applyThemeColor(theme: Theme) {
@@ -50,7 +50,7 @@ export function ThemeToggle() {
     }
     /* Notify any component (e.g. the map) that owns external state and
      * needs to react to a palette flip. */
-    window.dispatchEvent(new CustomEvent("gg-theme-change", { detail: next }));
+    window.dispatchEvent(new CustomEvent("vx-theme-change", { detail: next }));
   };
 
   const next: Theme = theme === "dark" ? "light" : "dark";

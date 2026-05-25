@@ -1,4 +1,4 @@
-﻿# Operations Runbook
+# Operations Runbook
 
 This runbook describes how to configure, run, verify, troubleshoot, and maintain GridGuard in a production-like environment.
 
@@ -89,6 +89,20 @@ Expected result:
 - `results` contains one scored city.
 - `errors` is empty or contains a clear external dependency error.
 
+### Zone assessment check
+
+```bash
+curl -X POST http://localhost:3000/api/assess-zones \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Expected result:
+
+- HTTP `200`.
+- `zones` contains scored H3 hex zones with boundaries.
+- `summary` shows high/medium/low counts.
+
 ### Custom assessment check
 
 ```bash
@@ -100,7 +114,7 @@ curl -X POST http://localhost:3000/api/assess \
 Expected result:
 
 - HTTP `200`.
-- Response includes `risk_score`, `risk_tier`, `factors`, `weather`, `generated_at`, `llm_narrative`, and `llm_source`.
+- Response includes `risk_score`, `risk_tier`, `factors` (5 factors), `weather`, `generated_at`, `llm_narrative`, `llm_source`, and `zone` context.
 
 ## Operational States
 
@@ -120,18 +134,21 @@ Healthy:
 
 - `/` returns `200`.
 - `/api/assess-batch` returns scored results.
-- Map renders and pins load.
+- `/api/assess-zones` returns scored zones with boundaries.
+- Map renders with zone choropleth and city pins.
 
 Degraded:
 
 - Gemini fallback is in use.
 - Some batch cities fail but others render.
+- Zone scoring partially fails but some zones render.
 - Weather or geocoding is slow but not fully unavailable.
 
 Unhealthy:
 
 - App route fails to load.
 - Scoring APIs fail for all cities.
+- Zone assessment returns no zones.
 - Derived datasets are missing and fallback behavior is insufficient.
 
 ## Troubleshooting
@@ -146,11 +163,28 @@ Likely causes:
 
 Actions:
 
-1. Check browser network tab for `/api/assess-batch`.
-2. Run the batch scoring curl check.
+1. Check browser network tab for `/api/assess-batch` and `/api/assess-zones`.
+2. Run the batch scoring and zone assessment curl checks.
 3. Inspect server logs for dataset load or weather fetch errors.
-4. Verify `datasets/derived` exists and contains generated JSON files.
+4. Verify `datasets/derived` exists and contains generated JSON files (including `ontario-hex-grid.json` and `historical-severe-weather.json`).
 5. Re-run `npm run build:data` if raw datasets are available.
+
+### Map loads but no zone colors appear
+
+Likely causes:
+
+- `/api/assess-zones` failed.
+- `datasets/derived/ontario-hex-grid.json` or `datasets/derived/historical-severe-weather.json` is missing.
+- Layer mode is set to "Cities" (zones are hidden).
+- Environment Canada requests are blocked or timing out.
+
+Actions:
+
+1. Check browser network tab for `/api/assess-zones`.
+2. Run the zone assessment curl check.
+3. Verify dataset files exist under `datasets/derived`.
+4. Check that the layer toggle is set to "Both" or "Zones".
+5. Re-run `npm run build:data` to regenerate hex grid and weather history.
 
 ### Search fails for a valid Ontario location
 
@@ -187,14 +221,14 @@ Actions:
 Likely causes:
 
 - Browser has stale hot-reload state.
-- `gg-theme` in localStorage conflicts with expected theme.
+- `vx-theme` in localStorage conflicts with expected theme.
 - Carto tile layer did not swap after theme toggle.
 
 Actions:
 
 1. Hard refresh the browser.
-2. Clear `localStorage.gg-theme` and reload.
-3. Toggle theme once to dispatch `gg-theme-change`.
+2. Clear `localStorage.vx-theme` and reload.
+3. Toggle theme once to dispatch `vx-theme-change`.
 4. Confirm Leaflet tile URLs use `light_nolabels` for light and `dark_nolabels` for dark.
 
 ### Hydration warning on theme
@@ -226,11 +260,12 @@ Refresh steps:
 
 1. Download or update raw datasets under `datasets/` according to `datasets/README.md`.
 2. Keep raw large files out of git unless explicitly required.
-3. Run `npm run build:data`.
+3. Run `npm run build:data` (chains `build-indices`, `build-hex-grid`, and `build-weather-history`).
 4. Run typecheck and build.
 5. Test at least one Toronto location and one northern Ontario location.
-6. Compare factor details for obvious regressions.
-7. Deploy derived JSON indices with the application.
+6. Verify zone count in `ontario-hex-grid.json` (expected ~673 hexes).
+7. Compare factor details for obvious regressions.
+8. Deploy derived JSON indices with the application.
 
 ## Monitoring Recommendations
 
@@ -238,14 +273,17 @@ Application signals:
 
 - Request rate and latency for `/api/assess`.
 - Request rate and latency for `/api/assess-batch`.
+- Request rate and latency for `/api/assess-zones`.
 - Error rate by external dependency: geocoding, weather, Gemini.
 - Gemini fallback rate.
 - Batch city failure count.
+- Zone scoring failure count.
 - Dataset load failure count.
 
 User-experience signals:
 
 - Time to first map pins.
+- Time to zone choropleth render.
 - Time to custom assessment completion.
 - Time to briefing completion.
 - Browser runtime errors from Leaflet or hydration.

@@ -14,22 +14,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GridGuard — Storm Outage Risk Predictor",
+  title: "Voltex — Storm Outage Risk Predictor",
   description:
     "Live outage risk assessment for Ontario utility operators. Weighted scoring across wind, canopy, flood exposure, and outage history with an LLM-generated action brief.",
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ddd2bc" },
-    { media: "(prefers-color-scheme: dark)", color: "#24221b" },
+    { media: "(prefers-color-scheme: light)", color: "#F0F2F5" },
+    { media: "(prefers-color-scheme: dark)", color: "#101216" },
   ],
 };
 
 /* Inline script: read the stored theme and apply it to the <html> element
  * before the body renders. Avoids any flash of the wrong theme on hard
  * reload. Kept tiny (no closures, no exception escapes). */
-const THEME_BOOT = `(function(){try{var c={dark:'#24221b',light:'#ddd2bc'};var t=localStorage.getItem('gg-theme');if(t!=='light'&&t!=='dark')t='dark';document.documentElement.setAttribute('data-theme',t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',c[t]);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
+const THEME_BOOT = `(function(){try{var c={dark:'#101216',light:'#F0F2F5'};var t=localStorage.getItem('vx-theme');if(t!=='light'&&t!=='dark')t='dark';document.documentElement.setAttribute('data-theme',t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',c[t]);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
 
 export default function RootLayout({
   children,

@@ -3,9 +3,9 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 
 export const metadata: Metadata = {
-  title: "Methodology — GridGuard",
+  title: "Methodology — Voltex",
   description:
-    "How GridGuard scores storm outage risk: the formula, the data sources, what the LLM briefing does, and where the model falls short.",
+    "How Voltex scores storm outage risk: the formula, the data sources, what the LLM briefing does, and where the model falls short.",
 };
 
 const PIPELINE = [
@@ -107,10 +107,10 @@ export default function AboutPage() {
               Methodology · v0.1
             </span>
             <h1 className="mt-5 text-balance text-5xl font-semibold leading-[1.05] tracking-tight text-[var(--paper)]">
-              How GridGuard reads a storm.
+              How Voltex reads a storm.
             </h1>
             <p className="mt-5 max-w-xl text-[15px] leading-7 text-[var(--paper-dim)]">
-              GridGuard is a transparent storm outage risk dashboard for Ontario
+              Voltex is a transparent storm outage risk dashboard for Ontario
               distribution operators. Every number you see on the dashboard comes from a
               public source, every weight is published, and every briefing is generated
               from the same structured payload an operator can inspect on screen. This
@@ -134,7 +134,7 @@ export default function AboutPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo-stormwatch.png"
-              alt="GridGuard storm-front mark"
+              alt="Voltex storm-front mark"
               className="absolute inset-0 h-full w-full object-cover"
             />
             <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between text-[10px] uppercase tracking-[0.22em] text-[var(--paper-dim)]/80">
@@ -160,7 +160,7 @@ export default function AboutPage() {
               <em>where to pre-position</em> before the front lands.
             </p>
             <p>
-              GridGuard takes that question seriously by making the answer auditable. The
+              Voltex takes that question seriously by making the answer auditable. The
               dashboard surfaces a coloured pin per monitored city the moment the page
               loads. Clicking any pin reveals the same structured factors the operator
               briefing was built from. Nothing is hidden behind a black-box score.

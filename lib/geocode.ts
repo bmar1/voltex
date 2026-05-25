@@ -13,7 +13,7 @@ export async function geocode(query: string): Promise<GeocodeResult> {
 
   const res = await fetchWithTimeout(url, {
     headers: {
-      "User-Agent": "GridGuard/0.1 (demo; storm outage risk predictor)",
+      "User-Agent": "Voltex/0.1 (demo; storm outage risk predictor)",
       "Accept-Language": "en",
     },
     cache: "no-store",

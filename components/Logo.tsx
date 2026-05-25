@@ -6,13 +6,12 @@ interface LogoProps {
 }
 
 /**
- * Stormwatch mark.
+ * Voltex mark.
  *
- * Arc above (storm front sweeping in), three vertical strokes beneath it
- * (people/poles/the grid we watch), single warm amber stroke in the centre
- * (the location currently being assessed), horizon line below (community
- * baseline). `currentColor` flows through the mono strokes so it inherits
- * paper/ink depending on the surface.
+ * A stylized lightning bolt inside a hexagonal shield outline.
+ * The bolt is rendered in the brand accent (electric blue), the hex
+ * outline inherits `currentColor` so it adapts to paper/ink depending
+ * on the surface. Clean, geometric, scales well from 24px nav to 128px favicon.
  */
 export function Logo({
   size = 28,
@@ -29,54 +28,28 @@ export function Logo({
         viewBox="0 0 64 64"
         fill="none"
         role="img"
-        aria-label="GridGuard"
+        aria-label="Voltex"
       >
+        {/* Hexagonal shield outline */}
         <path
-          d="M 10 40 A 22 22 0 0 1 54 40"
+          d="M32 4 L56 18 L56 46 L32 60 L8 46 L8 18 Z"
           stroke="currentColor"
           strokeWidth={stroke}
-          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
         />
-        <line
-          x1="22"
-          y1="34"
-          x2="22"
-          y2="46"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-        <line
-          x1="32"
-          y1="30"
-          x2="32"
-          y2="46"
-          stroke="#e0a458"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-        <line
-          x1="42"
-          y1="34"
-          x2="42"
-          y2="46"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-        <line
-          x1="9"
-          y1="52"
-          x2="55"
-          y2="52"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          strokeLinecap="round"
+        {/* Lightning bolt */}
+        <path
+          d="M35 12 L22 34 L30 34 L28 52 L42 28 L34 28 Z"
+          fill="var(--signal, #6C9CFF)"
+          stroke="var(--signal, #6C9CFF)"
+          strokeWidth={0.5}
+          strokeLinejoin="round"
         />
       </svg>
       {withWordmark && (
         <span className="text-base font-semibold tracking-tight text-[var(--paper)]">
-          GridGuard
+          Voltex
         </span>
       )}
     </span>

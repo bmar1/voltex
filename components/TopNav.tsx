@@ -15,11 +15,11 @@ export function TopNav({ onJumpToExplore }: TopNavProps) {
         <a
           href="#top"
           className="gg-press inline-flex items-center gap-3 text-[var(--paper)]"
-          aria-label="GridGuard home"
+          aria-label="Voltex home"
         >
           <Logo size={24} withWordmark />
           <span className="hidden text-[10px] uppercase tracking-[0.22em] text-[var(--muted)] sm:inline">
-            Storm Impact Dashboard · Ontario
+            Storm Risk Intelligence · Ontario
           </span>
         </a>
         <div className="flex items-center gap-2">

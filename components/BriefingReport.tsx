@@ -116,11 +116,11 @@ export function BriefingReport({
             aria-hidden
             className="relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--background-deep)] font-mono text-[10px] tracking-[0.18em] text-[var(--paper-dim)]"
           >
-            GG
+            VX
           </span>
           <div className="flex flex-col">
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--paper-dim)]">
-              GridGuard · SITREP
+              Voltex · SITREP
             </span>
             <span className="text-[13px] font-semibold text-[var(--paper)]">
               {location}
@@ -261,5 +261,5 @@ function makeRefId(location: string, iso: string): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   const hh = String(d.getHours()).padStart(2, "0");
-  return `GG-${yy}${mm}${dd}-${hh}-${(h % 9000 + 1000).toString()}`;
+  return `VX-${yy}${mm}${dd}-${hh}-${(h % 9000 + 1000).toString()}`;
 }

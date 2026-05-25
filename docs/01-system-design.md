@@ -1,6 +1,6 @@
-﻿# System Design
+# System Design
 
-GridGuard is a map-first outage-risk dashboard for Ontario utility operators. It combines live weather, local static geospatial indices, transparent weighted scoring, and a Gemini-generated situation report into a single operational view.
+GridGuard is a map-first outage-risk dashboard for Ontario utility operators. It combines live weather, local static geospatial indices, historical severe weather patterns, transparent weighted scoring over H3 hexagonal zones, and a Gemini-generated situation report into a single operational view.
 
 This document describes the production system shape, runtime flows, data boundaries, and main design tradeoffs.
 
@@ -23,28 +23,35 @@ flowchart TB
   browser --> page[Next.js App Router UI]
   page --> batch[/POST /api/assess-batch/]
   page --> assess[/POST /api/assess/]
+  page --> zones[/POST /api/assess-zones/]
   page --> narrative[/POST /api/narrative/]
 
   batch --> weather[Environment Canada weather]
   assess --> geocode[Nominatim geocoding]
   assess --> weather
+  zones --> weather
   narrative --> gemini[Gemini API]
 
   batch --> scoring[Scoring engine]
   assess --> scoring
+  zones --> scoring
   scoring --> derived[(Derived local indices)]
 
   derived --> canopy[Vegetation/canopy index]
   derived --> floods[Flood footprint index]
   derived --> outages[Outage-history proxy index]
+  derived --> hexgrid[H3 hex grid index]
+  derived --> wxhist[Severe weather history index]
 
   assess --> gemini
   assess --> response[Risk assessment + SITREP]
   batch --> board[Ontario risk board]
+  zones --> zonemap[Zone choropleth map]
   narrative --> sitrep[Operator SITREP]
 
   response --> browser
   board --> browser
+  zonemap --> browser
   sitrep --> browser
 ```
 
@@ -57,19 +64,24 @@ The frontend is a Next.js client-rendered dashboard with Leaflet map ownership i
 Core UI responsibilities:
 
 - Render Ontario-wide monitored city pins.
+- Render an H3 hexagonal zone choropleth layer colored by risk tier.
 - Track map viewport and show an exploration HUD.
+- Toggle between Zones, Cities, or Both layer modes.
 - Let operators add custom Ontario locations.
-- Open a detail panel for any selected city or custom assessment.
-- Auto-request an operator briefing when a pin is selected.
-- Switch theme and notify external map state via `gg-theme-change`.
+- Open a detail panel for any selected city pin or zone polygon.
+- Auto-request an operator briefing when a pin or zone is selected.
+- Switch theme and notify external map state via `vx-theme-change`.
 
 Key components:
 
 - `TopNav`: brand, mode switch, methodology navigation.
-- `RiskDashboard`: Leaflet map, batch scoring, pins, viewport-aware HUD, search.
+- `RiskDashboard`: Leaflet map, batch scoring, zone choropleth, pins, viewport-aware HUD, layer toggle, search.
+- `ZoneLayer`: Leaflet hex polygon rendering with risk-based color gradient.
+- `ZoneLegend`: color ramp legend overlay.
+- `ZoneDetailPanel`: zone detail panel with weather history profile, cities-in-zone, and briefing.
 - `BriefingReport`: parsed SITREP rendering with report metadata.
 - `RiskGauge`: score/tier visualization.
-- `FactorBreakdown`: factor-level explainability.
+- `FactorBreakdown`: 5-factor explainability display.
 
 ### API Layer
 
@@ -78,27 +90,39 @@ The API layer is implemented as Next.js route handlers running in the Node.js ru
 Endpoints:
 
 - `POST /api/assess-batch`: scores monitored cities without LLM generation. Used on dashboard load and refresh.
-- `POST /api/assess`: geocodes a user location, fetches weather, scores risk, and returns an LLM narrative.
-- `POST /api/narrative`: generates a narrative from an already scored assessment payload.
+- `POST /api/assess`: geocodes a user location, fetches weather, scores risk, includes zone context, and returns an LLM narrative.
+- `POST /api/assess-zones`: scores all H3 hex zones (or a filtered region). Used on dashboard load for the zone choropleth.
+- `POST /api/narrative`: generates a narrative from an already scored assessment payload, optionally including zone history context.
 
-The split keeps the map load fast and avoids making one LLM call per monitored city.
+The split keeps the map load fast and avoids making one LLM call per monitored city or zone.
 
 ### Data and Model Layer
 
-Local static datasets are transformed into small JSON indices by `scripts/build-indices.mjs`.
+Local static datasets are transformed into small JSON indices by the build pipeline (`npm run build:data`):
+
+- `scripts/build-indices.mjs`: 311 outage history, tree canopy grid, flood footprints.
+- `scripts/build-hex-grid.mjs`: H3 resolution-4 hexagonal grid covering Ontario (673 zones).
+- `scripts/build-weather-history.mjs`: synthetic historical severe weather data per hex zone.
 
 Runtime lookup happens through `lib/datasets.ts`:
 
 - Tree canopy / vegetation density.
 - Flood exposure via point-in-footprint or nearest footprint distance.
 - Outage-history proxy using Toronto 311 data and provincial fallbacks.
+- H3 hex zone lookup for coordinate-to-zone mapping.
+- Historical severe weather data per zone (tornado, ice storm, wind, thunderstorm, derecho corridor).
 
 Risk calculation happens in `lib/scoring.ts` and produces:
 
 - `risk_score`: normalized value rounded to two decimals.
 - `risk_tier`: Low, Medium, or High.
-- `factors`: raw values, normalized values, weights, contributions, and details.
+- `factors`: raw values, normalized values, weights, contributions, and details for all 5 factors.
 - `storm_context`: compact weather summary.
+
+Two scoring entry points:
+
+- `score()`: for point-based city/address assessments.
+- `scoreZone()`: for direct hex-based zone scoring.
 
 ## Request Flow: Dashboard Load
 
@@ -191,6 +215,8 @@ flowchart LR
   subgraph BuildTime[Build-time/local refresh]
     raw[Raw CSV/GeoJSON]
     builder[build-indices.mjs]
+    hexbuilder[build-hex-grid.mjs]
+    wxbuilder[build-weather-history.mjs]
     idx[Derived JSON indices]
   end
 
@@ -198,9 +224,12 @@ flowchart LR
     api[Next.js API routes]
     score[Scoring engine]
     ui[Operator dashboard]
+    zonelayer[Zone choropleth layer]
   end
 
   public --> raw --> builder --> idx
+  raw --> hexbuilder --> idx
+  idx --> wxbuilder --> idx
   ui --> api
   api --> nom
   api --> wx
@@ -208,6 +237,7 @@ flowchart LR
   idx --> score
   api --> ai
   score --> api --> ui
+  ui --> zonelayer
 ```
 
 Trust boundaries:
@@ -225,11 +255,13 @@ flowchart TD
   canopy[Canopy or vegetation density] --> nc[Normalize local density]
   flood[Flood footprint exposure] --> nf[Inside footprint or distance decay]
   history[Storm-related history proxy] --> nh[Normalize against max count]
+  wxhist[Severe weather history] --> nwx[Normalize composite against max]
 
   nw --> weighted[Weighted sum]
   nc --> weighted
   nf --> weighted
   nh --> weighted
+  nwx --> weighted
 
   weighted --> score[Risk score 0.00-1.00]
   score --> tier{Tier}
@@ -240,19 +272,21 @@ flowchart TD
 
 Current weights:
 
-- Wind: `0.30`
-- Canopy / vegetation: `0.25`
-- Flood exposure: `0.20`
-- Outage-history proxy: `0.25`
+- Wind: `0.25`
+- Canopy / vegetation: `0.20`
+- Flood exposure: `0.15`
+- Outage-history proxy: `0.20`
+- Severe weather history: `0.20`
 
 Formula:
 
 ```text
 risk_score = clamp01(
-  0.30 * wind
-+ 0.25 * canopy
-+ 0.20 * flood
-+ 0.25 * history
+  0.25 * wind
++ 0.20 * canopy
++ 0.15 * flood
++ 0.20 * history
++ 0.20 * weatherHistory
 )
 ```
 
