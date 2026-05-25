@@ -6,6 +6,39 @@ import type { BatchAssessResponse, SlimAssessResult } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function limitConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<PromiseSettledResult<T>[]> {
+  return new Promise((resolve) => {
+    const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+    let next = 0;
+    let completed = 0;
+
+    function runNext() {
+      if (next >= tasks.length) return;
+      const idx = next++;
+      tasks[idx]()
+        .then((value) => {
+          results[idx] = { status: "fulfilled", value };
+        })
+        .catch((reason) => {
+          results[idx] = { status: "rejected", reason };
+        })
+        .finally(() => {
+          completed++;
+          if (completed === tasks.length) {
+            resolve(results);
+          } else {
+            runNext();
+          }
+        });
+    }
+
+    const initial = Math.min(concurrency, tasks.length);
+    for (let i = 0; i < initial; i++) runNext();
+  });
+}
+
+const BATCH_CONCURRENCY = 6;
+
 interface CityInput {
   name: string;
   label?: string;
@@ -31,24 +64,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "cities array is required" }, { status: 400 });
   }
 
-  const settled = await Promise.allSettled(
-    cities.map(async (city): Promise<SlimAssessResult> => {
-      const coords = { lat: city.lat, lng: city.lng };
-      const weather = await fetchWeather(coords);
-      const scored = await score(coords, weather, city.fsa);
-      return {
-        name: city.name,
-        label: city.label ?? city.name,
-        coordinates: coords,
-        risk_score: scored.risk_score,
-        risk_tier: scored.risk_tier,
-        factors: scored.factors,
-        storm_context: scored.storm_context,
-        weather,
-        generated_at: new Date().toISOString(),
-      };
-    }),
-  );
+  const tasks = cities.map((city) => async (): Promise<SlimAssessResult> => {
+    const coords = { lat: city.lat, lng: city.lng };
+    const weather = await fetchWeather(coords);
+    const scored = await score(coords, weather, city.fsa);
+    return {
+      name: city.name,
+      label: city.label ?? city.name,
+      coordinates: coords,
+      risk_score: scored.risk_score,
+      risk_tier: scored.risk_tier,
+      factors: scored.factors,
+      storm_context: scored.storm_context,
+      weather,
+      generated_at: new Date().toISOString(),
+    };
+  });
+
+  const settled = await limitConcurrency(tasks, BATCH_CONCURRENCY);
 
   const results: SlimAssessResult[] = [];
   const errors: { name: string; message: string }[] = [];

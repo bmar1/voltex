@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ONTARIO_CITIES } from "@/lib/cities";
+import {
+  dominantRegion,
+  highestRiskInView,
+  pinInBounds,
+  regionLabel,
+  tierCountsInView,
+  type MapViewport,
+} from "@/lib/mapExplore";
 import type {
   AssessResponse,
   BatchAssessResponse,
@@ -30,8 +38,10 @@ interface PinEntry {
   custom?: boolean;
 }
 
-const MAP_TILE_URL =
-  "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png";
+function tileUrlForTheme(theme: string | null | undefined): string {
+  const tile = theme === "light" ? "light_nolabels" : "dark_nolabels";
+  return `https://{s}.basemaps.cartocdn.com/${tile}/{z}/{x}/{y}{r}.png`;
+}
 
 const TIER_CLASS: Record<RiskTier, string> = {
   High: "gg-risk-pin-high",
@@ -74,6 +84,8 @@ export default function RiskDashboard() {
   const [briefingLoading, setBriefingLoading] = useState<string | null>(null);
   const [briefingError, setBriefingError] = useState<Record<string, string>>({});
 
+  const [viewport, setViewport] = useState<MapViewport | null>(null);
+
   const selected = useMemo(
     () => pins.find((p) => p.key === selectedKey) ?? null,
     [pins, selectedKey],
@@ -84,6 +96,37 @@ export default function RiskDashboard() {
     for (const p of pins) counts[p.result.risk_tier] += 1;
     return counts;
   }, [pins]);
+
+  const explore = useMemo(() => {
+    if (!viewport || pins.length === 0) return null;
+
+    const visiblePins = pins.filter((p) =>
+      pinInBounds(
+        p.result.coordinates.lat,
+        p.result.coordinates.lng,
+        viewport.bounds,
+      ),
+    );
+    const visibleResults = visiblePins.map((p) => p.result);
+    const visibleCityNames = visiblePins.filter((p) => !p.custom).map((p) => p.result.name);
+    const allVisible = visiblePins.length === pins.length;
+    const region = allVisible
+      ? ("Provincial" as const)
+      : dominantRegion(visibleCityNames);
+
+    return {
+      visibleCount: visiblePins.length,
+      totalCount: pins.length,
+      region,
+      regionText: region ? regionLabel(region) : "Off map",
+      peak: highestRiskInView(visibleResults),
+      counts: tierCountsInView(visibleResults),
+      allVisible,
+    };
+  }, [viewport, pins]);
+
+  const legendCounts = explore && !explore.allVisible ? explore.counts : tierCounts;
+  const legendScope = explore && !explore.allVisible ? "in view" : "province";
 
   /* ---------------------------------------------------------- batch load */
   const runBatch = useCallback(async () => {
@@ -165,7 +208,8 @@ export default function RiskDashboard() {
         { padding: [20, 20] },
       );
 
-      const layer = L.tileLayer(MAP_TILE_URL, {
+      const initialTheme = document.documentElement.getAttribute("data-theme");
+      const layer = L.tileLayer(tileUrlForTheme(initialTheme), {
         maxZoom: 12,
         minZoom: 4,
         subdomains: "abcd",
@@ -185,6 +229,75 @@ export default function RiskDashboard() {
       tileLayerRef.current = null;
     };
   }, []);
+
+  /* ------------------------------------------------ theme-reactive tiles */
+  useEffect(() => {
+    if (!map) return;
+    let active = true;
+
+    const swap = async (theme: string | null | undefined) => {
+      const L = await import("leaflet");
+      if (!active) return;
+      if (tileLayerRef.current) {
+        map.removeLayer(tileLayerRef.current);
+      }
+      const layer = L.tileLayer(tileUrlForTheme(theme), {
+        maxZoom: 12,
+        minZoom: 4,
+        subdomains: "abcd",
+      }).addTo(map);
+      tileLayerRef.current = layer;
+    };
+
+    const onChange = (event: Event) => {
+      const theme = (event as CustomEvent<string>).detail;
+      void swap(theme);
+    };
+
+    window.addEventListener("gg-theme-change", onChange);
+    return () => {
+      active = false;
+      window.removeEventListener("gg-theme-change", onChange);
+    };
+  }, [map]);
+
+  /* ------------------------------------------- sync viewport on explore */
+  useEffect(() => {
+    if (!map) return;
+
+    const sync = () => {
+      const bounds = map.getBounds();
+      const center = map.getCenter();
+      setViewport({
+        zoom: map.getZoom(),
+        center: { lat: center.lat, lng: center.lng },
+        bounds: {
+          south: bounds.getSouth(),
+          west: bounds.getWest(),
+          north: bounds.getNorth(),
+          east: bounds.getEast(),
+        },
+        moving: false,
+      });
+    };
+
+    const onStart = () => {
+      setViewport((prev) => (prev ? { ...prev, moving: true } : prev));
+    };
+
+    map.on("movestart", onStart);
+    map.on("zoomstart", onStart);
+    map.on("moveend", sync);
+    map.on("zoomend", sync);
+    sync();
+
+    return () => {
+      map.off("movestart", onStart);
+      map.off("zoomstart", onStart);
+      map.off("moveend", sync);
+      map.off("zoomend", sync);
+    };
+  }, [map]);
 
   /* ---------------------------------------------------------- render pins */
   useEffect(() => {
@@ -207,26 +320,35 @@ export default function RiskDashboard() {
 
       for (const pin of pins) {
         const tierClass = pin.custom ? "gg-risk-pin-custom" : TIER_CLASS[pin.result.risk_tier];
-        const isActive = pin.key === selectedKey ? " is-active" : "";
+        const inView = viewport
+          ? pinInBounds(
+              pin.result.coordinates.lat,
+              pin.result.coordinates.lng,
+              viewport.bounds,
+            )
+          : true;
+        const isActive = pin.key === selectedKey;
+        const isDimmed = viewport && !inView && !isActive;
+        const stateClass = `${isActive ? " is-active" : ""}${isDimmed ? " is-dimmed" : ""}`;
         const html = `<span class="gg-risk-ring"></span><span class="gg-risk-dot"></span><span class="gg-risk-label">${pin.label}</span>`;
-        // Zero-size icon keeps the visual centred on the exact lat/lng pixel
-        // at every zoom level. Children position themselves with negative
-        // margins relative to (0,0).
         const icon = L.divIcon({
-          className: `gg-risk-pin ${tierClass}${isActive}`,
+          className: `gg-risk-pin ${tierClass}${stateClass}`,
           html,
           iconSize: [0, 0],
           iconAnchor: [0, 0],
         });
 
+        const zIndex = isActive ? 500 : 0;
+
         const current = existing.get(pin.key);
         if (current) {
           current.setIcon(icon);
           current.setLatLng([pin.result.coordinates.lat, pin.result.coordinates.lng]);
+          current.setZIndexOffset(zIndex);
         } else {
           const marker = L.marker(
             [pin.result.coordinates.lat, pin.result.coordinates.lng],
-            { icon, keyboard: false },
+            { icon, keyboard: false, zIndexOffset: zIndex },
           );
           marker.on("click", () => {
             setSelectedKey(pin.key);
@@ -240,7 +362,7 @@ export default function RiskDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [map, pins, selectedKey]);
+  }, [map, pins, selectedKey, viewport]);
 
   /* ---------------------------------------------------------- search */
   const handleSearchSubmit = useCallback(
@@ -314,19 +436,28 @@ export default function RiskDashboard() {
         return next;
       });
       try {
-        const res = await fetch("/api/assess", {
+        // Use the dedicated /api/narrative endpoint which only generates
+        // the LLM briefing from already-scored data, avoiding redundant
+        // geocoding, weather fetching, and re-scoring.
+        const res = await fetch("/api/narrative", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ location: pin.result.name }),
+          body: JSON.stringify({
+            location: pin.result.name,
+            risk_score: pin.result.risk_score,
+            risk_tier: pin.result.risk_tier,
+            storm_context: pin.result.storm_context,
+            factors: pin.result.factors,
+          }),
         });
         if (!res.ok) {
           const b = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(b.error ?? `Request failed (${res.status})`);
         }
-        const data = (await res.json()) as AssessResponse;
+        const data = (await res.json()) as { text: string; source: "gemini" | "local" };
         setBriefings((prev) => ({
           ...prev,
-          [pin.key]: { text: data.llm_narrative, source: data.llm_source ?? "gemini" },
+          [pin.key]: { text: data.text, source: data.source },
         }));
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Briefing failed";
@@ -348,18 +479,38 @@ export default function RiskDashboard() {
   }, [selectedKey, pins, briefings, briefingLoading, fetchBriefing]);
 
   /* ---------------------------------------------------------- render */
-  return (
-    <div className="relative h-full w-full overflow-hidden bg-[var(--background)]">
-      {/* Map layer */}
-      <div ref={containerRef} className="absolute inset-0 z-0" />
+  const mapActive = viewport?.moving ?? false;
 
-      {/* Top legend */}
-      <div className="pointer-events-none absolute left-4 top-4 z-20 flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--overlay)] px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-[var(--paper-dim)] backdrop-blur">
-        <LegendChip color="var(--risk-high)" label={`${tierCounts.High} high`} />
-        <span className="text-[var(--border-strong)]">·</span>
-        <LegendChip color="var(--risk-medium)" label={`${tierCounts.Medium} medium`} />
-        <span className="text-[var(--border-strong)]">·</span>
-        <LegendChip color="var(--risk-low)" label={`${tierCounts.Low} low`} />
+  return (
+    <div
+      className={`relative h-full w-full overflow-hidden bg-[var(--background)]${mapActive ? " gg-map-active" : ""}`}
+    >
+      {/* Map layer */}
+      <div ref={containerRef} className="gg-map-canvas absolute inset-0 z-0" />
+      <div aria-hidden className="gg-map-vignette absolute inset-0 z-[5]" />
+
+      {/* Explore HUD — reacts to pan/zoom */}
+      {explore && viewport && (
+        <ExploreHud explore={explore} viewport={viewport} moving={mapActive} />
+      )}
+
+      {/* Top legend — switches to in-view counts when zoomed in */}
+      <div
+        key={legendScope}
+        className="pointer-events-none absolute left-4 top-4 z-20 flex flex-col gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--overlay)] px-3 py-2 backdrop-blur gg-explore-hud"
+      >
+        <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--paper-dim)]">
+          <LegendChip color="var(--risk-high)" label={`${legendCounts.High} high`} />
+          <span className="text-[var(--border-strong)]">·</span>
+          <LegendChip color="var(--risk-medium)" label={`${legendCounts.Medium} medium`} />
+          <span className="text-[var(--border-strong)]">·</span>
+          <LegendChip color="var(--risk-low)" label={`${legendCounts.Low} low`} />
+        </div>
+        {explore && !explore.allVisible && (
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">
+            {legendScope} · {explore.visibleCount}/{explore.totalCount} cities
+          </span>
+        )}
       </div>
 
       {/* Batch loading overlay */}
@@ -422,6 +573,55 @@ export default function RiskDashboard() {
 }
 
 /* --------------------------------------------------- subcomponents */
+
+interface ExploreHudProps {
+  explore: {
+    visibleCount: number;
+    totalCount: number;
+    regionText: string;
+    peak: { label: string; risk_tier: RiskTier; risk_score: number } | null;
+    allVisible: boolean;
+  };
+  viewport: MapViewport;
+  moving: boolean;
+}
+
+function ExploreHud({ explore, viewport, moving }: ExploreHudProps) {
+  return (
+    <div
+      className="pointer-events-none absolute right-16 top-4 z-20 w-[min(100%,240px)] gg-explore-hud"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--overlay)] px-3 py-2.5 backdrop-blur">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted)]">
+            {moving ? "Scanning…" : "Viewing"}
+          </span>
+          <span className="font-mono text-[10px] tabular-nums text-[var(--paper-dim)]">
+            z{viewport.zoom.toFixed(1)}
+          </span>
+        </div>
+        <p className="gg-explore-stat mt-1 text-sm font-medium text-[var(--paper)]">
+          {explore.regionText}
+        </p>
+        <div className="gg-explore-stat mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.16em] text-[var(--paper-dim)]">
+          <span>
+            {explore.visibleCount}/{explore.totalCount} monitored
+          </span>
+          {explore.peak && !explore.allVisible && (
+            <>
+              <span className="text-[var(--border-strong)]">·</span>
+              <span className={TIER_LABEL_COLOR[explore.peak.risk_tier]}>
+                Peak: {explore.peak.label.split(",")[0]} ({explore.peak.risk_tier})
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LegendChip({ color, label }: { color: string; label: string }) {
   return (
@@ -697,9 +897,10 @@ function DetailPanel({
         )}
 
         <p className="mt-6 text-[11px] leading-relaxed text-[var(--muted)]">
-          Outage history is a public proxy (Toronto 311 storm-related requests by FSA),
-          not utility-owned feeder outage events. Live weather is sourced from
-          Environment Canada at the nearest station.
+          Toronto uses 311 storm-related requests as an outage proxy. Other regions
+          use provincial reliability estimates (IESO/Hydro One patterns). Vegetation
+          density uses Toronto street tree data (GTA) or NRCan land cover zones
+          (province-wide). Live weather is sourced from Environment Canada.
         </p>
       </div>
     </aside>

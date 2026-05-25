@@ -1,8 +1,11 @@
 import {
+  isInsideTorontoGrid,
   loadDatasets,
   lookupCanopyDensity,
   lookupFloodExposure,
   lookupOutageCount,
+  lookupProvincialOutageCount,
+  lookupProvincialVegetation,
 } from "./datasets";
 import type {
   Coordinates,
@@ -54,7 +57,7 @@ export async function score(
   weather: WeatherSnapshot,
   fsa?: string,
 ): Promise<ScoringResult> {
-  const { outages, canopy, floods } = await loadDatasets();
+  const { outages, canopy, floods, provincialVegetation, provincialOutages } = await loadDatasets();
 
   // Wind: normalize against 100km/h (sustained gale = ceiling).
   const wind = weather.windSpeedKmh ?? 0;
@@ -66,15 +69,39 @@ export async function score(
   }${weather.conditions ? ` — ${weather.conditions}` : ""}`;
 
   // Canopy: normalize using the 5x5 neighborhood vs the dataset's max cell density.
+  // Falls back to provincial vegetation density when outside the Toronto grid.
+  const insideToronto = isInsideTorontoGrid(canopy, coords.lat, coords.lng);
   const canopyLookup = lookupCanopyDensity(canopy, coords.lat, coords.lng);
-  const cellMax = canopy?.maxCell ?? 1;
-  const neighborhoodMax = cellMax * 25; // 5x5 cells
-  const canopyNormalized = neighborhoodMax > 0
-    ? canopyLookup.neighborhoodTrees / (neighborhoodMax * 0.4)
-    : 0;
-  const canopyDetail = canopy
-    ? `${canopyLookup.cellTrees} city trees in cell, ${canopyLookup.neighborhoodTrees} within ~1 km²`
-    : "canopy index unavailable";
+  let canopyNormalized: number;
+  let canopyDetail: string;
+  let canopyRaw: number | string | null;
+
+  if (insideToronto && canopyLookup.neighborhoodTrees > 0) {
+    // Toronto high-resolution street tree data.
+    const cellMax = canopy?.maxCell ?? 1;
+    const neighborhoodMax = cellMax * 25; // 5x5 cells
+    canopyNormalized = neighborhoodMax > 0
+      ? canopyLookup.neighborhoodTrees / (neighborhoodMax * 0.4)
+      : 0;
+    canopyDetail = `${canopyLookup.cellTrees} city trees in cell, ${canopyLookup.neighborhoodTrees} within ~1 km²`;
+    canopyRaw = canopyLookup.neighborhoodTrees;
+  } else {
+    // Provincial fallback: coarse vegetation density grid (~11 km cells).
+    const provLookup = lookupProvincialVegetation(provincialVegetation, coords.lat, coords.lng);
+    const provMax = provincialVegetation?.maxCell ?? 1;
+    // 3x3 neighborhood at provincial scale, normalize against a reasonable ceiling.
+    const provNeighborhoodMax = provMax * 9;
+    canopyNormalized = provNeighborhoodMax > 0
+      ? provLookup.neighborhoodDensity / (provNeighborhoodMax * 0.4)
+      : 0;
+    if (provLookup.neighborhoodDensity > 0) {
+      canopyDetail = `vegetation density ${provLookup.cellDensity} in cell, ${provLookup.neighborhoodDensity} within ~30 km² (provincial estimate)`;
+      canopyRaw = provLookup.neighborhoodDensity;
+    } else {
+      canopyDetail = "vegetation index unavailable for this area";
+      canopyRaw = 0;
+    }
+  }
 
   // Flood: 1.0 if inside a footprint, decays with distance otherwise.
   const floodLookup = lookupFloodExposure(floods, coords.lat, coords.lng);
@@ -91,18 +118,42 @@ export async function score(
   }
 
   // History: 311 storm-related counts at this FSA.
-  const outageCount = lookupOutageCount(outages, fsa);
-  const outageMax = outages?.maxCount ?? 1;
+  // Falls back to provincial outage estimates for non-Toronto FSAs.
+  const torontoOutageCount = lookupOutageCount(outages, fsa);
+  let outageCount: number;
+  let outageMax: number;
+  let historyDetail: string;
+
+  if (torontoOutageCount > 0) {
+    // Toronto 311 data available for this FSA.
+    outageCount = torontoOutageCount;
+    outageMax = outages?.maxCount ?? 1;
+    historyDetail = fsa
+      ? `${outageCount} storm-related 311 events recorded in ${fsa} (recent years)`
+      : "no FSA resolved — outage history unavailable";
+  } else {
+    // Provincial fallback.
+    const provOutageCount = lookupProvincialOutageCount(provincialOutages, fsa);
+    if (provOutageCount > 0) {
+      outageCount = provOutageCount;
+      outageMax = provincialOutages?.maxCount ?? 1;
+      historyDetail = `${outageCount} estimated storm-related events in ${fsa} (provincial reliability data)`;
+    } else {
+      outageCount = 0;
+      outageMax = 1;
+      historyDetail = fsa
+        ? `no outage records found for ${fsa}`
+        : "no FSA resolved — outage history unavailable";
+    }
+  }
+
   const historyNormalized = outageMax > 0 ? outageCount / outageMax : 0;
-  const historyDetail = fsa
-    ? `${outageCount} storm-related 311 events recorded in ${fsa} (recent years)`
-    : "no FSA resolved — outage history unavailable";
 
   const factors: RiskFactors = {
     wind: buildFactor("Wind", `${Math.round(wind)} km/h`, windNormalized, WEIGHTS.wind, windDetail),
     canopy: buildFactor(
       "Canopy",
-      canopyLookup.neighborhoodTrees,
+      canopyRaw,
       canopyNormalized,
       WEIGHTS.canopy,
       canopyDetail,

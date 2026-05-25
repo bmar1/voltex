@@ -25,10 +25,26 @@ interface FloodIndex {
   features: FloodFeature[];
 }
 
+/** Province-wide vegetation density at coarse resolution (0.1° ≈ 11 km cells). */
+interface ProvincialVegetation {
+  bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+  step: number;
+  maxCell: number;
+  grid: Record<string, number>;
+}
+
+/** Province-wide outage estimates by FSA (non-Toronto). */
+interface ProvincialOutages {
+  maxCount: number;
+  countsByFsa: Record<string, number>;
+}
+
 interface DatasetBundle {
   outages: OutageIndex | null;
   canopy: CanopyGrid | null;
   floods: FloodIndex | null;
+  provincialVegetation: ProvincialVegetation | null;
+  provincialOutages: ProvincialOutages | null;
 }
 
 const DERIVED = path.join(process.cwd(), "datasets", "derived");
@@ -47,12 +63,14 @@ async function readJson<T>(file: string): Promise<T | null> {
 export function loadDatasets(): Promise<DatasetBundle> {
   if (!cached) {
     cached = (async () => {
-      const [outages, canopy, floods] = await Promise.all([
+      const [outages, canopy, floods, provincialVegetation, provincialOutages] = await Promise.all([
         readJson<OutageIndex>(path.join(DERIVED, "outage-history-by-fsa.json")),
         readJson<CanopyGrid>(path.join(DERIVED, "tree-canopy-grid.json")),
         readJson<FloodIndex>(path.join(DERIVED, "flood-footprints-ontario.geojson")),
+        readJson<ProvincialVegetation>(path.join(DERIVED, "provincial-vegetation-density.json")),
+        readJson<ProvincialOutages>(path.join(DERIVED, "provincial-outage-estimates.json")),
       ]);
-      return { outages, canopy, floods };
+      return { outages, canopy, floods, provincialVegetation, provincialOutages };
     })();
   }
   return cached;
@@ -87,6 +105,43 @@ export function lookupCanopyDensity(canopy: CanopyGrid | null, lat: number, lng:
   }
   const cellTrees = grid[`${cy}_${cx}`] ?? 0;
   return { cellTrees, neighborhoodTrees, cellsSampled };
+}
+
+/** Provincial-scale vegetation density lookup (coarse 0.1° grid, ~11 km cells). */
+export function lookupProvincialVegetation(provincial: ProvincialVegetation | null, lat: number, lng: number): {
+  cellDensity: number;
+  neighborhoodDensity: number;
+} {
+  if (!provincial) return { cellDensity: 0, neighborhoodDensity: 0 };
+  const { bbox, step, grid } = provincial;
+  if (lat < bbox.minLat || lat > bbox.maxLat || lng < bbox.minLng || lng > bbox.maxLng) {
+    return { cellDensity: 0, neighborhoodDensity: 0 };
+  }
+  const cy = Math.floor((lat - bbox.minLat) / step);
+  const cx = Math.floor((lng - bbox.minLng) / step);
+  let neighborhoodDensity = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const key = `${cy + dy}_${cx + dx}`;
+      const v = grid[key];
+      if (v) neighborhoodDensity += v;
+    }
+  }
+  const cellDensity = grid[`${cy}_${cx}`] ?? 0;
+  return { cellDensity, neighborhoodDensity };
+}
+
+/** Provincial outage estimate lookup for FSAs not covered by Toronto 311 data. */
+export function lookupProvincialOutageCount(provincial: ProvincialOutages | null, fsa?: string): number {
+  if (!provincial || !fsa) return 0;
+  return provincial.countsByFsa[fsa] ?? 0;
+}
+
+/** Returns true if the given point falls within the Toronto-specific canopy grid bbox. */
+export function isInsideTorontoGrid(canopy: CanopyGrid | null, lat: number, lng: number): boolean {
+  if (!canopy) return false;
+  const { bbox } = canopy;
+  return lat >= bbox.minLat && lat <= bbox.maxLat && lng >= bbox.minLng && lng <= bbox.maxLng;
 }
 
 function pointInRing(lat: number, lng: number, ring: number[][]): boolean {

@@ -64,6 +64,12 @@ npm run build:data
 
 Sources are documented in [`datasets/README.md`](datasets/README.md).
 
+## Production docs
+
+- [`docs/01-system-design.md`](docs/01-system-design.md) - architecture, runtime flows, data boundaries, diagrams, limitations, and production evolution.
+- [`docs/02-product-methodology-and-use-cases.md`](docs/02-product-methodology-and-use-cases.md) - product methodology, use cases, operator scenarios, and interpretation guide.
+- [`docs/03-operations-runbook.md`](docs/03-operations-runbook.md) - configuration, deployment, health checks, troubleshooting, dataset refresh, monitoring, and incident response.
+
 ## Getting started
 
 ```bash

@@ -3,6 +3,20 @@ import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const ENDPOINT = "https://api.weather.gc.ca/collections/citypageweather-realtime/items";
 
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_PRECISION = 1; // 1 decimal place ≈ 11 km grid
+
+interface CacheEntry {
+  data: WeatherSnapshot;
+  expiry: number;
+}
+
+const weatherCache = new Map<string, CacheEntry>();
+
+function cacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(CACHE_PRECISION)}_${lng.toFixed(CACHE_PRECISION)}`;
+}
+
 // Many leaf fields in the MSC GeoMet response are localized as { en, fr }.
 type LocalizedString = { en?: string | number; fr?: string | number } | undefined;
 type LocalizedNumber = { en?: number | string; fr?: number | string } | undefined;
@@ -54,6 +68,12 @@ function num(v: LocalizedNumber | undefined): number | undefined {
 }
 
 export async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot> {
+  const key = cacheKey(coords.lat, coords.lng);
+  const cached = weatherCache.get(key);
+  if (cached && cached.expiry > Date.now()) {
+    return cached.data;
+  }
+
   const half = 0.5;
   const bbox = [
     coords.lng - half,
@@ -77,7 +97,10 @@ export async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot
     if (!res.ok) throw new Error(`Weather request failed (${res.status})`);
     const body = (await res.json()) as { features?: CityPageFeature[] };
     const features = body.features ?? [];
-    if (!features.length) return snapshot;
+    if (!features.length) {
+      weatherCache.set(key, { data: snapshot, expiry: Date.now() + CACHE_TTL_MS });
+      return snapshot;
+    }
 
     let nearest = features[0];
     let nearestDist = Infinity;
@@ -114,5 +137,6 @@ export async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot
     snapshot.alerts.push(`weather unavailable: ${(err as Error).message}`);
   }
 
+  weatherCache.set(key, { data: snapshot, expiry: Date.now() + CACHE_TTL_MS });
   return snapshot;
 }

@@ -82,7 +82,11 @@
   --signal-soft: rgba(166, 106, 36, 0.16);
   --signal-strong: rgba(166, 106, 36, 0.42);
 
-  --map-tiles: "dark_nolabels";
+  /* Match the nav/page chrome; light map tiles are blended onto this tone. */
+  --map-background: var(--background);
+  --map-wash: rgba(221, 210, 188, 0.44);
+
+  --map-tiles: "light_nolabels";
 }
 
 @theme inline {
@@ -377,33 +381,81 @@ input:focus-visible {
 
 /* Leaflet polish */
 .leaflet-container {
-  background: var(--background-deep);
+  background: var(--map-background, var(--background-deep));
   font-family: inherit;
 }
 
 /*
- * Carto "dark_nolabels" for every theme; CSS tints tiles to match page chrome.
+ * Theme-specific Carto basemaps. Dark uses the dark basemap; light uses the
+ * white basemap, then tones it down into cream so it stays readable.
  * Filters target .leaflet-tile-pane only so pins/controls stay crisp.
  */
 :root .leaflet-tile-pane,
 [data-theme="dark"] .leaflet-tile-pane {
   filter: brightness(1.55) saturate(0.55) sepia(0.3) hue-rotate(-6deg);
+  transition: filter 320ms var(--ease-out);
 }
 
 [data-theme="light"] .leaflet-tile-pane {
-  /* Lift dark grey tiles into muted parchment — same family as --background-deep. */
-  filter: brightness(1.12) sepia(0.78) saturate(0.32) contrast(0.76) hue-rotate(-16deg);
+  /* Use white tiles, but let the nav-colored map canvas dominate. */
+  opacity: 0.56;
+  filter: brightness(0.78) sepia(0.36) saturate(0.52) contrast(0.82) hue-rotate(-5deg);
 }
 
-/* Extra warm wash so water/land read as stock paper, not a glowing panel. */
-[data-theme="light"] .leaflet-container::before {
+/* Warm wash — stronger in light mode so water/land never glow. */
+.leaflet-container::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 250;
   pointer-events: none;
-  background: rgba(168, 148, 118, 0.28);
+  opacity: 0;
+  transition: opacity 320ms var(--ease-out);
+}
+
+[data-theme="light"] .leaflet-container::before {
+  opacity: 1;
+  background: var(--map-wash);
   mix-blend-mode: multiply;
+}
+
+/* Subtle edge vignette on the map frame (React overlay, not Leaflet). */
+.gg-map-vignette {
+  pointer-events: none;
+  background: radial-gradient(
+    120% 85% at 50% 45%,
+    transparent 52%,
+    color-mix(in srgb, var(--background-deep) 55%, transparent) 100%
+  );
+  opacity: 0.65;
+  transition: opacity 320ms var(--ease-out);
+}
+
+[data-theme="light"] .gg-map-vignette {
+  opacity: 0.58;
+  background: radial-gradient(
+    115% 80% at 50% 42%,
+    transparent 54%,
+    color-mix(in srgb, var(--background) 78%, #8d734b) 100%
+  );
+}
+
+/* While panning/zooming, tiles settle slightly and pins dim. */
+.gg-map-active .leaflet-tile-pane {
+  transition-duration: 80ms;
+}
+
+[data-theme="light"] .gg-map-active .leaflet-tile-pane {
+  opacity: 0.5;
+  filter: brightness(0.74) sepia(0.4) saturate(0.48) contrast(0.8) hue-rotate(-5deg);
+}
+
+.gg-map-active .gg-map-vignette {
+  opacity: 0.95;
+}
+
+.gg-map-active .gg-risk-pin.is-dimmed {
+  opacity: 0.18;
 }
 
 /* Carto attribution text on light themes is unreadable on the dark control
@@ -521,6 +573,9 @@ input:focus-visible {
   --pin-color: var(--signal);
   --pin-dot: 11px;
   --pin-ring: 26px;
+  transition:
+    opacity 260ms var(--ease-out),
+    filter 260ms var(--ease-out);
 }
 .gg-risk-pin-high {
   --pin-color: var(--risk-high);
@@ -605,17 +660,72 @@ input:focus-visible {
     transform 200ms var(--ease-out);
   pointer-events: none;
 }
-.gg-risk-pin:hover .gg-risk-label,
-.gg-risk-pin.is-active .gg-risk-label {
-  opacity: 1;
-  transform: translateX(0);
-}
 .gg-risk-pin:hover .gg-risk-dot,
 .gg-risk-pin.is-active .gg-risk-dot {
   transform: scale(1.18);
   box-shadow:
     0 0 0 2px var(--background),
     0 0 22px color-mix(in srgb, var(--pin-color) 90%, transparent);
+}
+
+.gg-risk-pin:hover .gg-risk-label,
+.gg-risk-pin.is-active .gg-risk-label {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Pins outside the current viewport fade so in-frame risk reads clearly. */
+.gg-risk-pin.is-dimmed {
+  opacity: 0.34;
+  filter: saturate(0.45);
+}
+
+.gg-risk-pin.is-dimmed:hover {
+  opacity: 1 !important;
+  filter: none;
+  z-index: 900 !important;
+}
+
+.gg-risk-pin.is-dimmed:hover .gg-risk-ring {
+  opacity: 0.45;
+}
+
+.gg-risk-pin.is-dimmed .gg-risk-ring {
+  animation: none;
+  opacity: 0.15;
+}
+
+.gg-risk-pin.is-active {
+  opacity: 1 !important;
+  filter: none;
+  z-index: 900 !important;
+}
+
+/* Explore HUD — slides/fades as the viewport changes. */
+.gg-explore-hud {
+  animation: gg-hud-in 280ms var(--ease-out) both;
+}
+
+@keyframes gg-hud-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gg-explore-stat {
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+
+.gg-map-active .gg-explore-stat {
+  opacity: 0.55;
+  transform: scale(0.98);
 }
 
 /* Detail panel slide-in (from the right). */

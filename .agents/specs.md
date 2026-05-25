@@ -19,6 +19,31 @@ Built in response to **Seneca Polytechnic x Industry Challenge — Theme 2, Prob
 - Show how open public datasets can be combined into a meaningful infrastructure tool
 - Serve as a portfolio-grade demo tying together backend data engineering, API integration, and AI-augmented output
 
+Theme 2: Smart Grid, Resilience and Electrification
+Extreme weather, rising demand, and electrification of transportation and buildings are
+putting unprecedented pressure on electrical grids. Utilities must strengthen resilience,
+predict outages, and plan for future load growth. This theme focuses on climate risk,
+infrastructure vulnerability, and electrification challenges.
+Problem Statement 1:
+Storms, heatwaves, and ice events are becoming more frequent and severe. Utilities
+struggle to anticipate where outages will occur, leading to reactive responses and longer
+restoration times.
+Possible solution(s):
+• Outage Prediction Model: Build a simple model that uses weather, vegetation, and
+infrastructure data to predict outage hotspots.
+• Storm Impact Dashboard: Design a dashboard that visualizes likely outage zones
+and risk levels.
+• Proactive Response Workflow: Outline a workflow that utilities can use to prepare
+for storms.
+Datasets Needed:
+Weather, flood zones, temperature, wind, vegetation, feeder locations.
+Public Dataset Sources (Examples):
+• Environment Canada Weather: https://weather.gc.ca/
+• Living Atlas – Real-Time Weather: https://livingatlas.arcgis.com
+• NRCan Flood Hazard Maps: https://open.canada.ca
+• Toronto Tree Canopy: https://open.toronto.ca/
+• Peel Region Environmental Layers: https://opendata.peelregion.ca/
+
 ---
 
 ## User Flow
