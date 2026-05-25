@@ -13,10 +13,52 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteDescription =
+  "Voltex maps storm outage risk across Ontario on an H3 hex grid. Live wind, tree cover, flood exposure, and outage history roll up into zone scores and operator briefs for utility crews.";
+
+function siteUrl(): URL {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return new URL(process.env.NEXT_PUBLIC_SITE_URL);
+  }
+  if (process.env.VERCEL_URL) {
+    return new URL(`https://${process.env.VERCEL_URL}`);
+  }
+  return new URL("http://localhost:3000");
+}
+
 export const metadata: Metadata = {
-  title: "Voltex — Storm Outage Risk Predictor",
-  description:
-    "Live outage risk assessment for Ontario utility operators. Weighted scoring across wind, canopy, flood exposure, and outage history with an LLM-generated action brief.",
+  metadataBase: siteUrl(),
+  title: {
+    default: "Voltex | Ontario Storm Outage Risk",
+    template: "%s | Voltex",
+  },
+  description: siteDescription,
+  applicationName: "Voltex",
+  icons: {
+    icon: [{ url: "/logo-mark.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/logo-mark.svg", type: "image/svg+xml" }],
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_CA",
+    siteName: "Voltex",
+    title: "Voltex | Ontario Storm Outage Risk",
+    description: siteDescription,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Voltex logo and tagline",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Voltex | Ontario Storm Outage Risk",
+    description: siteDescription,
+    images: ["/opengraph-image"],
+  },
 };
 
 export const viewport: Viewport = {
