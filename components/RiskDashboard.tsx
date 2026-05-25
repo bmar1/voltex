@@ -10,6 +10,7 @@ import {
   tierCountsInView,
   type MapViewport,
 } from "@/lib/mapExplore";
+import { apiUrl } from "@/lib/api";
 import type {
   AssessResponse,
   BatchAssessResponse,
@@ -146,7 +147,7 @@ export default function RiskDashboard() {
     setBatchLoading(true);
     setBatchError(null);
     try {
-      const res = await fetch("/api/assess-batch", {
+      const res = await fetch(apiUrl("/api/assess-batch"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -186,7 +187,7 @@ export default function RiskDashboard() {
   const loadZones = useCallback(async () => {
     setZonesLoading(true);
     try {
-      const res = await fetch('/api/assess-zones', {
+      const res = await fetch(apiUrl("/api/assess-zones"), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -231,7 +232,7 @@ export default function RiskDashboard() {
     if (!selectedZone || zoneBriefingLoading) return;
     setZoneBriefingLoading(true);
     try {
-      const res = await fetch('/api/narrative', {
+      const res = await fetch(apiUrl("/api/narrative"), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -448,7 +449,7 @@ export default function RiskDashboard() {
       setSearchLoading(true);
       setSearchError(null);
       try {
-        const res = await fetch("/api/assess", {
+        const res = await fetch(apiUrl("/api/assess"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ location }),
@@ -515,7 +516,7 @@ export default function RiskDashboard() {
         // Use the dedicated /api/narrative endpoint which only generates
         // the LLM briefing from already-scored data, avoiding redundant
         // geocoding, weather fetching, and re-scoring.
-        const res = await fetch("/api/narrative", {
+        const res = await fetch(apiUrl("/api/narrative"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
