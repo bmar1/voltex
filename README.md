@@ -22,7 +22,7 @@ Transparent, weighted storm-risk scoring for Ontario distribution operators — 
 
 ## Overview
 
-GridGuard takes Ontario, divides it into **673 H3 hexagonal zones** (~22 km each), fetches live weather from Environment Canada for each zone centroid, joins local static layers (tree canopy density, flood footprints, outage history, and historical severe weather patterns), and produces:
+Voltex takes Ontario, divides it into **673 H3 hexagonal zones** (~22 km each), fetches live weather from Environment Canada for each zone centroid, joins local static layers (tree canopy density, flood footprints, outage history, and historical severe weather patterns), and produces:
 
 - a normalized **risk score (0–1.00)** with an explicit **Low / Medium / High** tier per zone,
 - a **zone choropleth map** — hexagons colored green → amber → red by risk,
