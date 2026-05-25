@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { handleApiCorsPreflight } from "@/lib/cors";
 import { fetchWeather } from "@/lib/weather";
 import { score } from "@/lib/scoring";
 import type { BatchAssessResponse, SlimAssessResult } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function OPTIONS(req: Request) {
+  return handleApiCorsPreflight(req);
+}
 
 function limitConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<PromiseSettledResult<T>[]> {
   return new Promise((resolve) => {

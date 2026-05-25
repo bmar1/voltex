@@ -30,6 +30,8 @@
 !/datasets/derived
 /datasets/derived/*
 !/datasets/derived/.gitkeep
+!/datasets/derived/*.json
+!/datasets/derived/*.geojson
 
 # debug
 npm-debug.log*

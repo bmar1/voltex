@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
+import { handleApiCorsPreflight, withCors } from "@/lib/cors";
 import { fetchWeather } from "@/lib/weather";
 import { scoreZone } from "@/lib/scoring";
 import { loadDatasets, getAllHexZones } from "@/lib/datasets";
-import type { ZoneBatchResponse, ZoneRiskResult } from "@/lib/types";
+import type { WeatherSnapshot, ZoneBatchResponse, ZoneRiskResult } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function OPTIONS(req: Request) {
+  return handleApiCorsPreflight(req);
+}
 
 function limitConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<PromiseSettledResult<T>[]> {
   return new Promise((resolve) => {
@@ -38,10 +43,36 @@ function limitConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): 
   });
 }
 
-const BATCH_CONCURRENCY = 8;
+const BATCH_CONCURRENCY = 24;
 
 interface ZoneBody {
   region?: string;
+}
+
+/** One live weather sample per region — avoids hundreds of EC API calls per request. */
+async function weatherByRegion(
+  hexes: Array<{ region: string; center: { lat: number; lng: number } }>,
+): Promise<Map<string, WeatherSnapshot>> {
+  const cache = new Map<string, WeatherSnapshot>();
+  const regions = [...new Set(hexes.map((h) => h.region))];
+  await Promise.all(
+    regions.map(async (region) => {
+      const sample = hexes.find((h) => h.region === region);
+      if (!sample) return;
+      try {
+        const weather = await fetchWeather(sample.center);
+        cache.set(region, weather);
+      } catch {
+        cache.set(region, {
+          windSpeedKmh: 20,
+          windGustKmh: 30,
+          alerts: [],
+          source: "fallback",
+        });
+      }
+    }),
+  );
+  return cache;
 }
 
 export async function POST(req: Request) {
@@ -60,16 +91,32 @@ export async function POST(req: Request) {
   }
 
   if (hexes.length === 0) {
-    return NextResponse.json({
-      zones: [],
-      summary: { high_count: 0, medium_count: 0, low_count: 0, peak_zone: "", peak_score: 0 },
-      generated_at: new Date().toISOString(),
-    } satisfies ZoneBatchResponse);
+    return withCors(
+      req,
+      NextResponse.json(
+        {
+          error:
+            "H3 hex grid unavailable. Run npm run build:deploy-data before deploy or commit datasets/derived/*.json.",
+          zones: [],
+          summary: { high_count: 0, medium_count: 0, low_count: 0, peak_zone: "", peak_score: 0 },
+          generated_at: new Date().toISOString(),
+        },
+        { status: 503 },
+      ),
+    );
   }
+
+  const regionWeather = await weatherByRegion(hexes);
 
   const tasks = hexes.map((hex) => async (): Promise<ZoneRiskResult> => {
     const center = { lat: hex.center.lat, lng: hex.center.lng };
-    const weather = await fetchWeather(center);
+    const weather =
+      regionWeather.get(hex.region) ?? {
+        windSpeedKmh: 20,
+        windGustKmh: 30,
+        alerts: [],
+        source: "fallback",
+      };
     const scored = await scoreZone(hex.h3Index, center, weather);
     return {
       h3Index: hex.h3Index,
@@ -119,5 +166,5 @@ export async function POST(req: Request) {
     },
     generated_at: new Date().toISOString(),
   };
-  return NextResponse.json(response);
+  return withCors(req, NextResponse.json(response));
 }

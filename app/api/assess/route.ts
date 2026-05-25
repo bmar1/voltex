@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { handleApiCorsPreflight } from "@/lib/cors";
 import { geocode } from "@/lib/geocode";
 import { fetchWeather } from "@/lib/weather";
 import { score } from "@/lib/scoring";
@@ -8,6 +9,10 @@ import type { AssessResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function OPTIONS(req: Request) {
+  return handleApiCorsPreflight(req);
+}
 
 export async function POST(req: Request) {
   let body: { location?: string };

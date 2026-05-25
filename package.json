@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:deploy-data && next build",
     "start": "next start",
     "lint": "eslint",
-    "build:data": "node --max-old-space-size=4096 ./scripts/build-indices.mjs && node ./scripts/build-hex-grid.mjs && node ./scripts/build-weather-history.mjs"
+    "build:data": "node --max-old-space-size=4096 ./scripts/build-indices.mjs && node ./scripts/build-hex-grid.mjs && node ./scripts/build-weather-history.mjs",
+    "build:deploy-data": "node ./scripts/build-hex-grid.mjs && node ./scripts/build-weather-history.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

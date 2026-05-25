@@ -99,6 +99,7 @@ export default function RiskDashboard() {
   const [zoneBriefingLoading, setZoneBriefingLoading] = useState(false);
   const [layerMode, setLayerMode] = useState<'both' | 'zones' | 'cities'>('both');
   const [zonesLoading, setZonesLoading] = useState(true);
+  const [zonesError, setZonesError] = useState<string | null>(null);
 
   const selected = useMemo(
     () => pins.find((p) => p.key === selectedKey) ?? null,
@@ -186,17 +187,25 @@ export default function RiskDashboard() {
   /* ---------------------------------------------------------- zone load */
   const loadZones = useCallback(async () => {
     setZonesLoading(true);
+    setZonesError(null);
     try {
       const res = await fetch(apiUrl("/api/assess-zones"), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
-      if (!res.ok) throw new Error(`Zone request failed (${res.status})`);
-      const data = (await res.json()) as ZoneBatchResponse;
+      const data = (await res.json().catch(() => ({}))) as ZoneBatchResponse & { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? `Zone request failed (${res.status})`);
+      }
+      if (!data.zones?.length) {
+        throw new Error(data.error ?? "No H3 zones returned from API");
+      }
       setZoneResults(data.zones);
     } catch (e) {
-      console.error('Zone load failed:', e);
+      const message = e instanceof Error ? e.message : "Zone load failed";
+      setZonesError(message);
+      console.error("Zone load failed:", e);
     } finally {
       setZonesLoading(false);
     }
@@ -637,6 +646,19 @@ export default function RiskDashboard() {
           <button
             type="button"
             onClick={runBatch}
+            className="ml-3 underline-offset-2 hover:underline"
+          >
+            retry
+          </button>
+        </div>
+      )}
+
+      {zonesError && (
+        <div className="absolute left-1/2 top-32 z-20 max-w-md -translate-x-1/2 rounded-xl border border-[var(--risk-high)]/40 bg-[var(--overlay-strong)] px-4 py-2 text-sm text-[var(--risk-high)] backdrop-blur">
+          {zonesError}
+          <button
+            type="button"
+            onClick={() => void loadZones()}
             className="ml-3 underline-offset-2 hover:underline"
           >
             retry

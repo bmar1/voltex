@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { handleApiCorsPreflight } from "@/lib/cors";
 import { generateNarrative } from "@/lib/llm";
 import type { RiskFactors, RiskTier } from "@/lib/types";
 import type { WeatherHistoryEntry } from "@/lib/datasets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function OPTIONS(req: Request) {
+  return handleApiCorsPreflight(req);
+}
 
 interface NarrativeBody {
   location?: string;
