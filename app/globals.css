@@ -752,3 +752,95 @@ input:focus-visible {
 .gg-tier-high { color: var(--risk-high); }
 .gg-tier-medium { color: var(--risk-medium); }
 .gg-tier-low { color: var(--risk-low); }
+
+/* Zone choropleth layer */
+.gg-zone-polygon {
+  transition: opacity 200ms var(--ease-out), fill-opacity 200ms var(--ease-out);
+}
+
+.gg-zone-tooltip {
+  background: var(--overlay-strong) !important;
+  border: 1px solid var(--border-strong) !important;
+  color: var(--paper) !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+}
+
+.gg-zone-legend {
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  backdrop-filter: blur(8px);
+  transition: opacity 280ms var(--ease-out);
+}
+
+.gg-layer-toggle {
+  background: var(--overlay);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  backdrop-filter: blur(8px);
+}
+
+.gg-layer-toggle button {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 160ms var(--ease-out);
+  letter-spacing: 0.02em;
+}
+
+.gg-layer-toggle button.active {
+  color: var(--paper);
+  background: var(--surface-strong);
+}
+
+.gg-layer-toggle button:hover:not(.active) {
+  color: var(--paper-dim);
+}
+
+/* Zone detail panel historical stats */
+.gg-zone-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.gg-zone-stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gg-zone-stat-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.gg-zone-stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--paper);
+  line-height: 1;
+}
+
+.gg-zone-stat-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
