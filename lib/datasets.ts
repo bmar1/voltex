@@ -1,6 +1,7 @@
 import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { latLngToCell } from "h3-js";
 
 interface OutageIndex {
   maxCount: number;
@@ -39,12 +40,43 @@ interface ProvincialOutages {
   countsByFsa: Record<string, number>;
 }
 
+/** H3 hex grid covering Ontario. */
+export interface HexGridIndex {
+  resolution: number;
+  count: number;
+  hexes: Array<{
+    h3Index: string;
+    center: { lat: number; lng: number };
+    boundary: [number, number][];
+    region: string;
+  }>;
+}
+
+/** Historical severe weather data per hex. */
+export interface WeatherHistoryEntry {
+  tornado_events: number;
+  ice_storm_events: number;
+  high_wind_events: number;
+  severe_thunderstorm_events: number;
+  derecho_exposure: boolean;
+  composite: number;
+}
+
+export interface WeatherHistoryIndex {
+  source: string;
+  period: string;
+  maxComposite: number;
+  byHex: Record<string, WeatherHistoryEntry>;
+}
+
 interface DatasetBundle {
   outages: OutageIndex | null;
   canopy: CanopyGrid | null;
   floods: FloodIndex | null;
   provincialVegetation: ProvincialVegetation | null;
   provincialOutages: ProvincialOutages | null;
+  hexGrid: HexGridIndex | null;
+  weatherHistory: WeatherHistoryIndex | null;
 }
 
 const DERIVED = path.join(process.cwd(), "datasets", "derived");
@@ -63,14 +95,16 @@ async function readJson<T>(file: string): Promise<T | null> {
 export function loadDatasets(): Promise<DatasetBundle> {
   if (!cached) {
     cached = (async () => {
-      const [outages, canopy, floods, provincialVegetation, provincialOutages] = await Promise.all([
+      const [outages, canopy, floods, provincialVegetation, provincialOutages, hexGrid, weatherHistory] = await Promise.all([
         readJson<OutageIndex>(path.join(DERIVED, "outage-history-by-fsa.json")),
         readJson<CanopyGrid>(path.join(DERIVED, "tree-canopy-grid.json")),
         readJson<FloodIndex>(path.join(DERIVED, "flood-footprints-ontario.geojson")),
         readJson<ProvincialVegetation>(path.join(DERIVED, "provincial-vegetation-density.json")),
         readJson<ProvincialOutages>(path.join(DERIVED, "provincial-outage-estimates.json")),
+        readJson<HexGridIndex>(path.join(DERIVED, "ontario-hex-grid.json")),
+        readJson<WeatherHistoryIndex>(path.join(DERIVED, "historical-severe-weather.json")),
       ]);
-      return { outages, canopy, floods, provincialVegetation, provincialOutages };
+      return { outages, canopy, floods, provincialVegetation, provincialOutages, hexGrid, weatherHistory };
     })();
   }
   return cached;
@@ -202,4 +236,26 @@ export function lookupFloodExposure(floods: FloodIndex | null, lat: number, lng:
     }
   }
   return { insideFootprint, nearestKm, recentFeature };
+}
+
+// ── Zone / Hex Grid helpers ──────────────────────────────────────────────
+
+/** Look up the H3 hex index for a coordinate pair (resolution 4). */
+export function getHexForCoords(lat: number, lng: number): string {
+  return latLngToCell(lat, lng, 4);
+}
+
+/** Look up historical severe weather data for a given hex. */
+export function lookupWeatherHistory(
+  weatherHistory: WeatherHistoryIndex | null,
+  hexIndex: string,
+): WeatherHistoryEntry | null {
+  if (!weatherHistory) return null;
+  return weatherHistory.byHex[hexIndex] ?? null;
+}
+
+/** Return all hex zones with geometry for frontend rendering. */
+export function getAllHexZones(hexGrid: HexGridIndex | null) {
+  if (!hexGrid) return [];
+  return hexGrid.hexes;
 }

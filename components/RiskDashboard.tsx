@@ -15,10 +15,15 @@ import type {
   BatchAssessResponse,
   RiskTier,
   SlimAssessResult,
+  ZoneRiskResult,
+  ZoneBatchResponse,
 } from "@/lib/types";
 import { RiskGauge } from "./RiskGauge";
 import { FactorBreakdown } from "./FactorBreakdown";
 import { BriefingReport } from "./BriefingReport";
+import { ZoneLayer } from "./ZoneLayer";
+import { ZoneLegend } from "./ZoneLegend";
+import { ZoneDetailPanel } from "./ZoneDetailPanel";
 
 interface BriefingEntry {
   text: string;
@@ -85,6 +90,14 @@ export default function RiskDashboard() {
   const [briefingError, setBriefingError] = useState<Record<string, string>>({});
 
   const [viewport, setViewport] = useState<MapViewport | null>(null);
+
+  // Zone state
+  const [zoneResults, setZoneResults] = useState<ZoneRiskResult[]>([]);
+  const [selectedZone, setSelectedZone] = useState<ZoneRiskResult | null>(null);
+  const [zoneBriefing, setZoneBriefing] = useState<{ text: string; source: string } | null>(null);
+  const [zoneBriefingLoading, setZoneBriefingLoading] = useState(false);
+  const [layerMode, setLayerMode] = useState<'both' | 'zones' | 'cities'>('both');
+  const [zonesLoading, setZonesLoading] = useState(true);
 
   const selected = useMemo(
     () => pins.find((p) => p.key === selectedKey) ?? null,
@@ -169,12 +182,75 @@ export default function RiskDashboard() {
     }
   }, []);
 
+  /* ---------------------------------------------------------- zone load */
+  const loadZones = useCallback(async () => {
+    setZonesLoading(true);
+    try {
+      const res = await fetch('/api/assess-zones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!res.ok) throw new Error(`Zone request failed (${res.status})`);
+      const data = (await res.json()) as ZoneBatchResponse;
+      setZoneResults(data.zones);
+    } catch (e) {
+      console.error('Zone load failed:', e);
+    } finally {
+      setZonesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Mount-only initial load; runBatch sets internal loading state but is
     // the entire purpose of this effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void runBatch();
-  }, [runBatch]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadZones();
+  }, [runBatch, loadZones]);
+
+  /* ---------------------------------------------------------- zone click */
+  const handleZoneClick = useCallback((zone: ZoneRiskResult) => {
+    setSelectedZone(zone);
+    setSelectedKey(null);
+    setZoneBriefing(null);
+  }, []);
+
+  const getCitiesInZone = useCallback((zone: ZoneRiskResult): SlimAssessResult[] => {
+    return pins
+      .map((p) => p.result)
+      .filter((r) => {
+        const dLat = (r.coordinates.lat - zone.center.lat) * 111;
+        const dLng = (r.coordinates.lng - zone.center.lng) * 111 * Math.cos((zone.center.lat * Math.PI) / 180);
+        return Math.sqrt(dLat * dLat + dLng * dLng) < 15;
+      });
+  }, [pins]);
+
+  const requestZoneBriefing = useCallback(async () => {
+    if (!selectedZone || zoneBriefingLoading) return;
+    setZoneBriefingLoading(true);
+    try {
+      const res = await fetch('/api/narrative', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: selectedZone.zone_label,
+          risk_score: selectedZone.risk_score,
+          risk_tier: selectedZone.risk_tier,
+          storm_context: selectedZone.storm_context,
+          factors: selectedZone.factors,
+        }),
+      });
+      if (!res.ok) throw new Error(`Briefing failed (${res.status})`);
+      const data = (await res.json()) as { text: string; source: string };
+      setZoneBriefing(data);
+    } catch (e) {
+      console.error('Zone briefing failed:', e);
+    } finally {
+      setZoneBriefingLoading(false);
+    }
+  }, [selectedZone, zoneBriefingLoading]);
 
   /* ---------------------------------------------------------- create map */
   useEffect(() => {
@@ -254,10 +330,10 @@ export default function RiskDashboard() {
       void swap(theme);
     };
 
-    window.addEventListener("gg-theme-change", onChange);
+    window.addEventListener("vx-theme-change", onChange);
     return () => {
       active = false;
-      window.removeEventListener("gg-theme-change", onChange);
+      window.removeEventListener("vx-theme-change", onChange);
     };
   }, [map]);
 
@@ -489,6 +565,30 @@ export default function RiskDashboard() {
       <div ref={containerRef} className="gg-map-canvas absolute inset-0 z-0" />
       <div aria-hidden className="gg-map-vignette absolute inset-0 z-[5]" />
 
+      {/* Zone choropleth layer */}
+      <ZoneLayer
+        map={map}
+        zones={zoneResults}
+        selectedZone={selectedZone?.h3Index ?? null}
+        onZoneClick={handleZoneClick}
+        visible={layerMode === 'both' || layerMode === 'zones'}
+      />
+      <ZoneLegend visible={(layerMode === 'both' || layerMode === 'zones') && zoneResults.length > 0} />
+
+      {/* Layer mode toggle */}
+      <div className="pointer-events-auto absolute right-16 top-[80px] z-20 gg-layer-toggle">
+        {(['zones', 'both', 'cities'] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setLayerMode(mode)}
+            className={layerMode === mode ? 'active' : ''}
+          >
+            {mode === 'both' ? 'Both' : mode === 'zones' ? 'Zones' : 'Cities'}
+          </button>
+        ))}
+      </div>
+
       {/* Explore HUD — reacts to pan/zoom */}
       {explore && viewport && (
         <ExploreHud explore={explore} viewport={viewport} moving={mapActive} />
@@ -524,7 +624,7 @@ export default function RiskDashboard() {
               </span>
             </div>
             <p className="mt-2 text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-              live weather · canopy · flood · 311 history
+              live weather · canopy · flood · 311 history · severe weather zones
             </p>
           </div>
         </div>
@@ -543,8 +643,18 @@ export default function RiskDashboard() {
         </div>
       )}
 
-      {/* Detail panel */}
-      {selected && (
+      {/* Detail panel (pin or zone) */}
+      {selectedZone && (
+        <ZoneDetailPanel
+          zone={selectedZone}
+          citiesInZone={getCitiesInZone(selectedZone)}
+          onClose={() => setSelectedZone(null)}
+          onRequestBriefing={requestZoneBriefing}
+          briefing={zoneBriefing}
+          briefingLoading={zoneBriefingLoading}
+        />
+      )}
+      {selected && !selectedZone && (
         <DetailPanel
           pin={selected}
           briefing={briefings[selected.key]}
@@ -564,8 +674,8 @@ export default function RiskDashboard() {
         error={searchError}
         counts={tierCounts}
         lastUpdated={lastUpdated}
-        refreshing={batchLoading}
-        onRefresh={runBatch}
+        refreshing={batchLoading || zonesLoading}
+        onRefresh={() => { void runBatch(); void loadZones(); }}
         attribution="Carto · OpenStreetMap"
       />
     </div>
@@ -917,11 +1027,11 @@ function BriefingSkeleton() {
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)]/60 px-4 py-3">
         <div className="flex items-center gap-3">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--background-deep)] font-mono text-[10px] tracking-[0.18em] text-[var(--paper-dim)]">
-            GG
+            VX
           </span>
           <div className="flex flex-col gap-1">
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--paper-dim)]">
-              GridGuard · SITREP
+              Voltex · SITREP
             </span>
             <span className="gg-shimmer h-3 w-32 rounded" />
           </div>

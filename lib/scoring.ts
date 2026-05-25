@@ -6,6 +6,8 @@ import {
   lookupOutageCount,
   lookupProvincialOutageCount,
   lookupProvincialVegetation,
+  getHexForCoords,
+  lookupWeatherHistory,
 } from "./datasets";
 import type {
   Coordinates,
@@ -15,7 +17,7 @@ import type {
   WeatherSnapshot,
 } from "./types";
 
-const WEIGHTS = { wind: 0.3, canopy: 0.25, flood: 0.2, history: 0.25 };
+const WEIGHTS = { wind: 0.25, canopy: 0.20, flood: 0.15, history: 0.20, weatherHistory: 0.20 };
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
@@ -50,6 +52,51 @@ export interface ScoringResult {
   risk_tier: RiskTier;
   factors: RiskFactors;
   storm_context: string;
+}
+
+/**
+ * Build the weather history factor for any coordinate pair.
+ * Looks up the H3 hex and its historical severe weather data.
+ */
+async function buildWeatherHistoryFactor(
+  lat: number,
+  lng: number,
+  hexIndexOverride?: string,
+) {
+  const { weatherHistory } = await loadDatasets();
+  const hexIndex = hexIndexOverride ?? getHexForCoords(lat, lng);
+  const entry = lookupWeatherHistory(weatherHistory, hexIndex);
+  const maxComposite = weatherHistory?.maxComposite ?? 1;
+
+  if (!entry || entry.composite === 0) {
+    return buildFactor(
+      "Severe weather history",
+      0,
+      0,
+      WEIGHTS.weatherHistory,
+      "no historical severe weather data for this zone",
+    );
+  }
+
+  const normalized = maxComposite > 0 ? entry.composite / maxComposite : 0;
+  const parts: string[] = [];
+  if (entry.tornado_events > 0) parts.push(`${entry.tornado_events} tornado events`);
+  if (entry.ice_storm_events > 0) parts.push(`${entry.ice_storm_events} ice storms`);
+  if (entry.high_wind_events > 0) parts.push(`${entry.high_wind_events} high-wind events`);
+  if (entry.severe_thunderstorm_events > 0) parts.push(`${entry.severe_thunderstorm_events} severe thunderstorms`);
+  if (entry.derecho_exposure) parts.push("derecho corridor");
+
+  const detail = parts.length > 0
+    ? `20-yr zone history: ${parts.join(", ")}`
+    : "minimal historical severe weather";
+
+  return buildFactor(
+    "Severe weather history",
+    entry.composite,
+    normalized,
+    WEIGHTS.weatherHistory,
+    detail,
+  );
 }
 
 export async function score(
@@ -149,6 +196,9 @@ export async function score(
 
   const historyNormalized = outageMax > 0 ? outageCount / outageMax : 0;
 
+  // Weather history: historical severe weather frequency for this zone.
+  const weatherHistoryFactor = await buildWeatherHistoryFactor(coords.lat, coords.lng);
+
   const factors: RiskFactors = {
     wind: buildFactor("Wind", `${Math.round(wind)} km/h`, windNormalized, WEIGHTS.wind, windDetail),
     canopy: buildFactor(
@@ -166,13 +216,15 @@ export async function score(
       floodDetail,
     ),
     history: buildFactor("Outage history", outageCount, historyNormalized, WEIGHTS.history, historyDetail),
+    weatherHistory: weatherHistoryFactor,
   };
 
   const risk_score = clamp01(
     factors.wind.contribution +
       factors.canopy.contribution +
       factors.flood.contribution +
-      factors.history.contribution,
+      factors.history.contribution +
+      factors.weatherHistory.contribution,
   );
 
   const storm_context = buildStormContext(weather);
@@ -182,6 +234,106 @@ export async function score(
     risk_tier: tierFor(risk_score),
     factors,
     storm_context,
+  };
+}
+
+/**
+ * Score a zone directly by H3 index. Similar to score() but skips FSA lookup
+ * and uses the hex index directly for weather history.
+ */
+export async function scoreZone(
+  hexIndex: string,
+  center: Coordinates,
+  weather: WeatherSnapshot,
+): Promise<ScoringResult> {
+  const { outages, canopy, floods, provincialVegetation, provincialOutages } = await loadDatasets();
+
+  // Wind
+  const wind = weather.windSpeedKmh ?? 0;
+  const gust = weather.windGustKmh ?? 0;
+  const windAnchor = Math.max(wind, gust * 0.85);
+  const windNormalized = windAnchor / 100;
+  const windDetail = `${Math.round(wind)} km/h sustained${
+    gust ? `, ${Math.round(gust)} km/h gust` : ""
+  }${weather.conditions ? ` — ${weather.conditions}` : ""}`;
+
+  // Canopy
+  const insideToronto = isInsideTorontoGrid(canopy, center.lat, center.lng);
+  const canopyLookup = lookupCanopyDensity(canopy, center.lat, center.lng);
+  let canopyNormalized: number;
+  let canopyDetail: string;
+  let canopyRaw: number | string | null;
+
+  if (insideToronto && canopyLookup.neighborhoodTrees > 0) {
+    const cellMax = canopy?.maxCell ?? 1;
+    const neighborhoodMax = cellMax * 25;
+    canopyNormalized = neighborhoodMax > 0
+      ? canopyLookup.neighborhoodTrees / (neighborhoodMax * 0.4) : 0;
+    canopyDetail = `${canopyLookup.cellTrees} trees in cell, ${canopyLookup.neighborhoodTrees} within ~1 km²`;
+    canopyRaw = canopyLookup.neighborhoodTrees;
+  } else {
+    const provLookup = lookupProvincialVegetation(provincialVegetation, center.lat, center.lng);
+    const provMax = provincialVegetation?.maxCell ?? 1;
+    const provNeighborhoodMax = provMax * 9;
+    canopyNormalized = provNeighborhoodMax > 0
+      ? provLookup.neighborhoodDensity / (provNeighborhoodMax * 0.4) : 0;
+    canopyDetail = provLookup.neighborhoodDensity > 0
+      ? `vegetation density ${provLookup.neighborhoodDensity} (provincial)`
+      : "vegetation index unavailable";
+    canopyRaw = provLookup.neighborhoodDensity || 0;
+  }
+
+  // Flood
+  const floodLookup = lookupFloodExposure(floods, center.lat, center.lng);
+  let floodNormalized = 0;
+  let floodDetail = "no historical flood footprint nearby";
+  if (floodLookup.insideFootprint) {
+    floodNormalized = 1;
+    floodDetail = "inside NRCan historical flood footprint";
+  } else if (floodLookup.nearestKm < 50) {
+    floodNormalized = 1 - floodLookup.nearestKm / 50;
+    floodDetail = `nearest flood footprint ${floodLookup.nearestKm.toFixed(1)} km`;
+  }
+
+  // History: use provincial outage estimates (no FSA for zones)
+  const provOutageCount = lookupProvincialOutageCount(provincialOutages);
+  const outageCount = provOutageCount > 0 ? provOutageCount : 0;
+  const outageMax = provincialOutages?.maxCount ?? 1;
+  const historyNormalized = outageMax > 0 ? outageCount / outageMax : 0;
+  const historyDetail = outageCount > 0
+    ? `${outageCount} estimated storm-related events (provincial)`
+    : "zone-level outage history not available";
+
+  // Weather history: direct hex lookup
+  const weatherHistoryFactor = await buildWeatherHistoryFactor(center.lat, center.lng, hexIndex);
+
+  const factors: RiskFactors = {
+    wind: buildFactor("Wind", `${Math.round(wind)} km/h`, windNormalized, WEIGHTS.wind, windDetail),
+    canopy: buildFactor("Canopy", canopyRaw, canopyNormalized, WEIGHTS.canopy, canopyDetail),
+    flood: buildFactor(
+      "Flood",
+      floodLookup.insideFootprint ? "inside footprint" : `${floodLookup.nearestKm.toFixed(1)} km`,
+      floodNormalized,
+      WEIGHTS.flood,
+      floodDetail,
+    ),
+    history: buildFactor("Outage history", outageCount, historyNormalized, WEIGHTS.history, historyDetail),
+    weatherHistory: weatherHistoryFactor,
+  };
+
+  const risk_score = clamp01(
+    factors.wind.contribution +
+      factors.canopy.contribution +
+      factors.flood.contribution +
+      factors.history.contribution +
+      factors.weatherHistory.contribution,
+  );
+
+  return {
+    risk_score: Math.round(risk_score * 100) / 100,
+    risk_tier: tierFor(risk_score),
+    factors,
+    storm_context: buildStormContext(weather),
   };
 }
 

@@ -222,6 +222,13 @@ async function main() {
   await build311();
   await buildCanopyGrid();
   await combineFlood();
+
+  // Zone-based hex grid and historical weather datasets
+  const { buildHexGrid } = await import("./build-hex-grid.mjs");
+  await buildHexGrid();
+  const { buildWeatherHistory } = await import("./build-weather-history.mjs");
+  await buildWeatherHistory();
+
   console.log("DONE");
 }
 

@@ -1,4 +1,5 @@
 import type { AssessResponse } from "./types";
+import type { WeatherHistoryEntry } from "./datasets";
 import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const ENDPOINT =
@@ -24,7 +25,8 @@ Rules:
 - Use plain text only. NEVER use markdown formatting (no **, no #, no backticks, no italics).
 - The block labels POSTURE, DRIVERS, ACTIONS, WATCH must appear exactly as written, uppercase, followed by a colon.
 - Each ACTION must be specific. Do NOT write filler like "continue monitoring" or "maintain posture" without a target — name the feeder type, the crew action, the alert audience, or the metric.
-- Total length under 160 words. No preamble. No closing remarks.`;
+- If historical severe weather data is provided for the zone, reference it in DRIVERS or WATCH when relevant (e.g., "this zone has a history of ice storms" or "derecho corridor — maintain elevated watch").
+- Total length under 180 words. No preamble. No closing remarks.`;
 
 interface NarrativePayload {
   location: string;
@@ -32,6 +34,8 @@ interface NarrativePayload {
   risk_tier: AssessResponse["risk_tier"];
   storm_context: string;
   factors: AssessResponse["factors"];
+  zoneHistory?: WeatherHistoryEntry;
+  neighboringZones?: Array<{ label: string; tier: string }>;
 }
 
 export interface NarrativeResult {
@@ -43,22 +47,35 @@ export async function generateNarrative(payload: NarrativePayload): Promise<Narr
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { text: localNarrative(payload), source: "local" };
 
-  const userPrompt = JSON.stringify(
-    {
-      location: payload.location,
-      risk_score: payload.risk_score,
-      risk_tier: payload.risk_tier,
-      storm_event: payload.storm_context,
-      factors: {
-        wind_speed: payload.factors.wind.detail,
-        canopy: payload.factors.canopy.detail,
-        flood: payload.factors.flood.detail,
-        outage_history: payload.factors.history.detail,
-      },
+  const promptData: Record<string, unknown> = {
+    location: payload.location,
+    risk_score: payload.risk_score,
+    risk_tier: payload.risk_tier,
+    storm_event: payload.storm_context,
+    factors: {
+      wind_speed: payload.factors.wind.detail,
+      canopy: payload.factors.canopy.detail,
+      flood: payload.factors.flood.detail,
+      outage_history: payload.factors.history.detail,
+      severe_weather_history: payload.factors.weatherHistory.detail,
     },
-    null,
-    2,
-  );
+  };
+
+  if (payload.zoneHistory) {
+    promptData.zone_severe_weather_history = {
+      tornado_events: payload.zoneHistory.tornado_events,
+      ice_storm_events: payload.zoneHistory.ice_storm_events,
+      high_wind_events: payload.zoneHistory.high_wind_events,
+      severe_thunderstorm_events: payload.zoneHistory.severe_thunderstorm_events,
+      derecho_corridor: payload.zoneHistory.derecho_exposure,
+    };
+  }
+
+  if (payload.neighboringZones?.length) {
+    promptData.neighboring_zones = payload.neighboringZones;
+  }
+
+  const userPrompt = JSON.stringify(promptData, null, 2);
 
   try {
     const res = await fetchWithTimeout(
@@ -102,19 +119,26 @@ function localNarrative(payload: NarrativePayload): string {
     { name: "canopy", c: factors.canopy.contribution, detail: factors.canopy.detail },
     { name: "flood exposure", c: factors.flood.contribution, detail: factors.flood.detail },
     { name: "outage history", c: factors.history.contribution, detail: factors.history.detail },
+    { name: "severe weather history", c: factors.weatherHistory.contribution, detail: factors.weatherHistory.detail },
   ].sort((a, b) => b.c - a.c);
 
-  const top = drivers.slice(0, 2);
+  const top = drivers.slice(0, 3);
   const actions =
     risk_tier === "High"
       ? "Pre-position repair crews near the affected feeders, issue proactive public alerts within the next 2 hours, and monitor substation load for early anomaly detection."
       : risk_tier === "Medium"
         ? "Place on-call crews on standby, brief dispatch on the storm context, and verify backup feeder readiness."
         : "Maintain normal posture, but keep a watch on the wind forecast and any active alerts.";
+
+  const historyNote = factors.weatherHistory.contribution > 0.05
+    ? ` This zone has elevated historical severe weather risk (${factors.weatherHistory.detail}).`
+    : "";
+
   return [
     `${location} is currently rated ${risk_tier} Risk.`,
     `Top drivers: ${top.map((d) => `${d.name} (${d.detail})`).join("; ")}.`,
     `Storm context: ${storm_context}.`,
     actions,
-  ].join(" ");
+    historyNote,
+  ].filter(Boolean).join(" ");
 }

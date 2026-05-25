@@ -1,12 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { RiskFactors } from "@/lib/types";
 
 interface FactorBreakdownProps {
   factors: RiskFactors;
 }
 
-const ICONS = {
+const ICONS: Record<string, ReactNode> = {
   wind: (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <path d="M3 8h12a3 3 0 1 0-3-3" />
@@ -35,6 +36,11 @@ const ICONS = {
       <path d="M3 4v5h5" />
     </svg>
   ),
+  weatherHistory: (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  ),
 };
 
 function pct(n: number) {
@@ -43,17 +49,18 @@ function pct(n: number) {
 
 export function FactorBreakdown({ factors }: FactorBreakdownProps) {
   const items = [
-    { key: "wind" as const, factor: factors.wind },
-    { key: "canopy" as const, factor: factors.canopy },
-    { key: "flood" as const, factor: factors.flood },
-    { key: "history" as const, factor: factors.history },
+    { key: "wind", factor: factors.wind },
+    { key: "canopy", factor: factors.canopy },
+    { key: "flood", factor: factors.flood },
+    { key: "history", factor: factors.history },
+    { key: "weatherHistory", factor: factors.weatherHistory },
   ];
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" style={{ gridTemplateRows: "auto auto auto" }}>
       {items.map((item, i) => (
         <div
           key={item.key}
-          className={`gg-card gg-enter gg-enter-${i + 1} p-4`}
+          className={`gg-card gg-enter gg-enter-${i + 1} p-4${i === 4 ? " sm:col-span-2" : ""}`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-[var(--paper-dim)]">

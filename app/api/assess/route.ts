@@ -3,6 +3,7 @@ import { geocode } from "@/lib/geocode";
 import { fetchWeather } from "@/lib/weather";
 import { score } from "@/lib/scoring";
 import { generateNarrative } from "@/lib/llm";
+import { getHexForCoords, loadDatasets, lookupWeatherHistory } from "@/lib/datasets";
 import type { AssessResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,12 +26,20 @@ export async function POST(req: Request) {
     const geo = await geocode(location);
     const weather = await fetchWeather(geo.coordinates);
     const scored = await score(geo.coordinates, weather, geo.fsa);
+
+    // Look up zone context for this location
+    const hexIndex = getHexForCoords(geo.coordinates.lat, geo.coordinates.lng);
+    const { weatherHistory, hexGrid } = await loadDatasets();
+    const wxHistory = lookupWeatherHistory(weatherHistory, hexIndex);
+    const hexMeta = hexGrid?.hexes.find((h) => h.h3Index === hexIndex);
+
     const narrative = await generateNarrative({
       location: geo.displayName,
       risk_score: scored.risk_score,
       risk_tier: scored.risk_tier,
       storm_context: scored.storm_context,
       factors: scored.factors,
+      zoneHistory: wxHistory ?? undefined,
     });
 
     const response: AssessResponse = {
@@ -45,6 +54,12 @@ export async function POST(req: Request) {
       llm_source: narrative.source,
       weather,
       generated_at: new Date().toISOString(),
+      zone: {
+        h3Index: hexIndex,
+        zone_risk_score: scored.risk_score,
+        zone_risk_tier: scored.risk_tier,
+        region: hexMeta?.region ?? "Unknown",
+      },
     };
     return NextResponse.json(response);
   } catch (err) {
