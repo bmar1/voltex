@@ -68,10 +68,46 @@ export function ZoneLayer({ map, zones, selectedZone, onZoneClick, visible }: Zo
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const polygonsRef = useRef<Map<string, any>>(new Map());
   const selectedZoneRef = useRef<string | null>(selectedZone);
+  const suppressHoverRef = useRef(false);
+
+  const closeAllTooltips = () => {
+    for (const poly of polygonsRef.current.values()) {
+      poly.closeTooltip?.();
+    }
+  };
 
   useEffect(() => {
     selectedZoneRef.current = selectedZone;
   }, [selectedZone]);
+
+  // Close tooltips and block hover while panning/zooming the map
+  useEffect(() => {
+    if (!map) return;
+
+    const onMoveStart = () => {
+      suppressHoverRef.current = true;
+      closeAllTooltips();
+    };
+    const onMoveEnd = () => {
+      suppressHoverRef.current = false;
+    };
+
+    map.on("dragstart", onMoveStart);
+    map.on("movestart", onMoveStart);
+    map.on("zoomstart", onMoveStart);
+    map.on("dragend", onMoveEnd);
+    map.on("moveend", onMoveEnd);
+    map.on("zoomend", onMoveEnd);
+
+    return () => {
+      map.off("dragstart", onMoveStart);
+      map.off("movestart", onMoveStart);
+      map.off("zoomstart", onMoveStart);
+      map.off("dragend", onMoveEnd);
+      map.off("moveend", onMoveEnd);
+      map.off("zoomend", onMoveEnd);
+    };
+  }, [map]);
 
   // Create / tear down layer group
   useEffect(() => {
@@ -160,13 +196,17 @@ export function ZoneLayer({ map, zones, selectedZone, onZoneClick, visible }: Zo
           `;
 
           poly.bindTooltip(tooltipContent, {
-            sticky: true,
+            sticky: false,
+            interactive: false,
             className: 'gg-zone-tooltip',
             direction: 'top',
             offset: [0, -8],
           });
 
           poly.on('mouseover', () => {
+            if (suppressHoverRef.current) return;
+            closeAllTooltips();
+            poly.openTooltip();
             if (zone.h3Index !== selectedZoneRef.current) {
               poly.setStyle(getZoneStyle(zone, 'hover'));
               poly.bringToFront();
@@ -174,6 +214,7 @@ export function ZoneLayer({ map, zones, selectedZone, onZoneClick, visible }: Zo
           });
 
           poly.on('mouseout', () => {
+            poly.closeTooltip();
             poly.setStyle(getZoneStyle(zone, 'base'));
           });
 
