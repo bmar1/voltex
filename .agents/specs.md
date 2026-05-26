@@ -1,11 +1,11 @@
-# GridGuard — Storm Outage Risk Predictor
+# Voltex — Storm Outage Risk Predictor
 ### Project Spec v1.0
 
 ---
 
 ## Overview
 
-GridGuard is a demo web application that allows a utility operator (or any user) to enter a location in Ontario and receive a real-time outage risk assessment for that area. The tool ingests live weather data, cross-references pre-loaded static datasets, computes a risk score, and uses an LLM to generate a plain-language utility response recommendation.
+Voltex is a demo web application that allows a utility operator (or any user) to enter a location in Ontario and receive a real-time outage risk assessment for that area. The tool ingests live weather data, cross-references pre-loaded static datasets, computes a risk score, and uses an LLM to generate a plain-language utility response recommendation.
 
 Built in response to **Seneca Polytechnic x Industry Challenge — Theme 2, Problem Statement 1:**
 > *Storms, heatwaves, and ice events are becoming more frequent and severe. Utilities struggle to anticipate where outages will occur, leading to reactive responses and longer restoration times.*
@@ -219,7 +219,7 @@ POST /api/assess
 
 ## Alignment to Challenge Criteria
 
-| Criterion | How GridGuard addresses it |
+| Criterion | How Voltex addresses it |
 |---|---|
 | Uses public datasets | Environment Canada, NRCan, Toronto Open Data, Peel Open Data |
 | Addresses utility pain point | Reactive outage response → proactive risk scoring |
