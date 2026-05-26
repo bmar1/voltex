@@ -194,10 +194,11 @@ export default function RiskDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
-      const data = (await res.json().catch(() => ({}))) as ZoneBatchResponse & { error?: string };
       if (!res.ok) {
-        throw new Error(data.error ?? `Zone request failed (${res.status})`);
+        const b = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(b.error ?? `Zone request failed (${res.status})`);
       }
+      const data = (await res.json()) as ZoneBatchResponse & { error?: string };
       if (!data.zones?.length) {
         throw new Error(data.error ?? "No H3 zones returned from API");
       }
