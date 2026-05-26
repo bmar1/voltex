@@ -1,10 +1,10 @@
 # Operations Runbook
 
-This runbook describes how to configure, run, verify, troubleshoot, and maintain GridGuard in a production-like environment.
+This runbook describes how to configure, run, verify, troubleshoot, and maintain Voltex in a production-like environment.
 
 ## Service Summary
 
-GridGuard is a Next.js 16 application with server-side API routes and a client-side Leaflet dashboard.
+Voltex is a Next.js 16 application with server-side API routes and a client-side Leaflet dashboard.
 
 Runtime dependencies:
 

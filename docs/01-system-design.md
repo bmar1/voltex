@@ -1,12 +1,12 @@
 # System Design
 
-GridGuard is a map-first outage-risk dashboard for Ontario utility operators. It combines live weather, local static geospatial indices, historical severe weather patterns, transparent weighted scoring over H3 hexagonal zones, and a Gemini-generated situation report into a single operational view.
+Voltex is a map-first outage-risk dashboard for Ontario utility operators. It combines live weather, local static geospatial indices, historical severe weather patterns, transparent weighted scoring over H3 hexagonal zones, and a Gemini-generated situation report into a single operational view.
 
 This document describes the production system shape, runtime flows, data boundaries, and main design tradeoffs.
 
 ## Goals
 
-GridGuard is designed to answer three operational questions quickly:
+Voltex is designed to answer three operational questions quickly:
 
 - Where are outage hotspots likely right now?
 - Why is a zone risky?
@@ -18,36 +18,36 @@ The current implementation is a deployable Next.js application rather than a uti
 
 ```mermaid
 flowchart TB
-  operator[Utility operator] --> browser[Browser dashboard]
+  operator["Utility operator"] --> browser["Browser dashboard"]
 
-  browser --> page[Next.js App Router UI]
-  page --> batch[/POST /api/assess-batch/]
-  page --> assess[/POST /api/assess/]
-  page --> zones[/POST /api/assess-zones/]
-  page --> narrative[/POST /api/narrative/]
+  browser --> page["Next.js App Router UI"]
+  page --> batch["POST /api/assess-batch"]
+  page --> assess["POST /api/assess"]
+  page --> zones["POST /api/assess-zones"]
+  page --> narrative["POST /api/narrative"]
 
-  batch --> weather[Environment Canada weather]
-  assess --> geocode[Nominatim geocoding]
+  batch --> weather["Environment Canada weather"]
+  assess --> geocode["Nominatim geocoding"]
   assess --> weather
   zones --> weather
-  narrative --> gemini[Gemini API]
+  narrative --> gemini["Gemini API"]
 
-  batch --> scoring[Scoring engine]
+  batch --> scoring["Scoring engine"]
   assess --> scoring
   zones --> scoring
-  scoring --> derived[(Derived local indices)]
+  scoring --> derived[("Derived local indices")]
 
-  derived --> canopy[Vegetation/canopy index]
-  derived --> floods[Flood footprint index]
-  derived --> outages[Outage-history proxy index]
-  derived --> hexgrid[H3 hex grid index]
-  derived --> wxhist[Severe weather history index]
+  derived --> canopy["Vegetation/canopy index"]
+  derived --> floods["Flood footprint index"]
+  derived --> outages["Outage-history proxy index"]
+  derived --> hexgrid["H3 hex grid index"]
+  derived --> wxhist["Severe weather history index"]
 
   assess --> gemini
-  assess --> response[Risk assessment + SITREP]
-  batch --> board[Ontario risk board]
-  zones --> zonemap[Zone choropleth map]
-  narrative --> sitrep[Operator SITREP]
+  assess --> response["Risk assessment + SITREP"]
+  batch --> board["Ontario risk board"]
+  zones --> zonemap["Zone choropleth map"]
+  narrative --> sitrep["Operator SITREP"]
 
   response --> browser
   board --> browser
@@ -131,20 +131,28 @@ sequenceDiagram
   autonumber
   participant B as Browser
   participant D as RiskDashboard
-  participant API as /api/assess-batch
+  participant Batch as /api/assess-batch
+  participant Zones as /api/assess-zones
   participant W as Environment Canada
   participant S as Scoring Engine
   participant L as Local Indices
 
   B->>D: Load / dashboard
-  D->>API: POST monitored Ontario cities
-  API->>W: Fetch nearest live weather per city
-  API->>S: Score each city with concurrency limit
-  S->>L: Lookup vegetation, flood, outage history
+  par Parallel on mount
+    D->>Batch: POST monitored Ontario cities
+    D->>Zones: POST {} (all zones)
+  end
+  Batch->>W: Fetch nearest live weather per city
+  Batch->>S: Score each city (concurrency 8)
+  Zones->>W: Fetch weather per zone centroid (concurrency 8)
+  Zones->>S: scoreZone() per hex
+  S->>L: Lookup vegetation, flood, outage, weather history
   L-->>S: Factor inputs
-  S-->>API: Slim risk result per city
-  API-->>D: results[], errors[], generated_at
-  D->>D: Render pins, counts, explore HUD
+  S-->>Batch: Slim risk result per city
+  S-->>Zones: ZoneRiskResult per hex
+  Batch-->>D: results[], errors[], generated_at
+  Zones-->>D: zones[], summary, generated_at
+  D->>D: Render pins, zone choropleth, counts, explore HUD
 ```
 
 Operational notes:
@@ -198,7 +206,8 @@ stateDiagram-v2
 Briefing behavior:
 
 - Custom `/api/assess` responses include `llm_narrative` immediately.
-- Monitored city pins fetch a narrative lazily through `/api/assess` or `/api/narrative` patterns.
+- Monitored city pins fetch a narrative lazily through `/api/narrative` using the already-scored assessment payload.
+- Zone briefings are also fetched through `/api/narrative` when the operator clicks "Generate zone briefing."
 - `lib/llm.ts` returns `source: gemini | local` so the UI can label fallback output.
 
 ## Data Flow and Trust Boundaries
@@ -236,7 +245,8 @@ flowchart LR
   api --> score
   idx --> score
   api --> ai
-  score --> api --> ui
+  score --> api
+  api --> ui
   ui --> zonelayer
 ```
 
@@ -294,7 +304,7 @@ risk_score = clamp01(
 
 ```mermaid
 flowchart TB
-  user[Operator browser] --> edge[Hosting platform / CDN]
+  user[Operator browser] --> edge[Railway / hosting platform]
   edge --> next[Next.js server]
 
   subgraph NextRuntime[Node.js runtime]
@@ -313,19 +323,25 @@ flowchart TB
 
   subgraph Build[Build step]
     install[npm install]
-    indices[npm run build:data]
+    deploydata[npm run build:deploy-data]
     compile[next build]
   end
 
-  install --> indices --> compile --> next
+  install --> deploydata
+  deploydata --> compile
+  compile --> next
 ```
+
+Current deployment: Railway with automatic builds from the main branch.
+
+The production build script (`npm run build` in `package.json`) chains `build:deploy-data` (hex grid + weather history generation) before `next build`. Raw dataset indices (311 outages, canopy, floods) are pre-built and committed under `datasets/derived`.
 
 Recommended production deployment characteristics:
 
 - Node.js runtime with filesystem access to `datasets/derived`.
 - Environment variable `GEMINI_API_KEY` set only on the server.
+- `NEXT_PUBLIC_SITE_URL` set to the canonical production domain for OG metadata.
 - Static raw datasets kept out of the deployed bundle unless required for refresh jobs.
-- `npm run build:data` run before `next build` or as a scheduled refresh pipeline.
 - Health check against `/` and a lightweight synthetic check against `/api/assess-batch` with one city.
 
 ## Failure Modes

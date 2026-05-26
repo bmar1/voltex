@@ -1,6 +1,6 @@
-# GridGuard Local Datasets
+# Voltex Local Datasets
 
-This folder contains local static datasets used by the GridGuard scoring backend. Large downloaded payloads are git-ignored; this manifest is kept in source control so the files can be refreshed or re-downloaded.
+This folder contains local static datasets used by the Voltex scoring backend. Large downloaded payloads are git-ignored; this manifest is kept in source control so the files can be refreshed or re-downloaded.
 
 ## Outage History Proxy
 

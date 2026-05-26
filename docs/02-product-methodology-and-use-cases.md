@@ -1,10 +1,10 @@
 # Product Methodology and Use Cases
 
-This document explains what GridGuard does from the operator's point of view, why each signal exists, and how the output should be interpreted.
+This document explains what Voltex does from the operator's point of view, why each signal exists, and how the output should be interpreted.
 
 ## Product Statement
 
-GridGuard helps an Ontario utility operator move from reactive outage response to proactive storm posture. It does not claim to know exactly which customer will lose power. Instead, it highlights zones where public risk signals suggest higher outage likelihood and explains what is driving that signal.
+Voltex helps an Ontario utility operator move from reactive outage response to proactive storm posture. It does not claim to know exactly which customer will lose power. Instead, it highlights zones where public risk signals suggest higher outage likelihood and explains what is driving that signal.
 
 The system divides Ontario into **673 H3 hexagonal zones** (~22 km each), scores each zone using a 5-factor model (live weather, vegetation density, flood exposure, outage history, and historical severe weather patterns), and presents the results as an interactive choropleth map alongside monitored city pins.
 
@@ -51,7 +51,7 @@ Typical questions:
 
 ```mermaid
 mindmap
-  root((GridGuard use cases))
+  root((Voltex use cases))
     Storm watch
       Scan zone choropleth map
       Find highest-risk zones and cities
@@ -86,7 +86,7 @@ mindmap
 sequenceDiagram
   autonumber
   participant Sup as Supervisor
-  participant UI as GridGuard dashboard
+  participant UI as Voltex dashboard
   participant Map as Ontario map
   participant Panel as Detail panel
   participant Brief as SITREP
@@ -157,11 +157,11 @@ Success criteria:
 
 ### 1. Locate the zone
 
-For custom assessments, GridGuard uses Nominatim to convert user-provided location text into coordinates. Where available, postal code information is used to derive the FSA for history lookup.
+For custom assessments, Voltex uses Nominatim to convert user-provided location text into coordinates. Where available, postal code information is used to derive the FSA for history lookup.
 
 ### 2. Read the current storm signal
 
-GridGuard calls Environment Canada for the nearest weather station and extracts:
+Voltex calls Environment Canada for the nearest weather station and extracts:
 
 - Sustained wind speed.
 - Gust speed when available.
@@ -251,9 +251,9 @@ Recommended operator stance:
 - Monitor watch thresholds closely.
 - Reference zone weather history for context on recurring patterns.
 
-## What GridGuard Is Not
+## What Voltex Is Not
 
-GridGuard is not:
+Voltex is not:
 
 - A replacement for SCADA, OMS, ADMS, or utility GIS.
 - A legal floodplain determination tool.
@@ -261,11 +261,11 @@ GridGuard is not:
 - A source of truth for customer outage counts.
 - An autonomous dispatch system.
 
-GridGuard is an explainable decision-support layer that shows where public risk signals point and why.
+Voltex is an explainable decision-support layer that shows where public risk signals point and why.
 
 ## Production Acceptance Criteria
 
-Before using a GridGuard-like tool operationally, a utility should require:
+Before using a Voltex-like tool operationally, a utility should require:
 
 - Authenticated access with role separation.
 - Utility-owned outage labels for calibration.
