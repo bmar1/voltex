@@ -587,7 +587,7 @@ export default function RiskDashboard() {
       <ZoneLegend visible={(layerMode === 'both' || layerMode === 'zones') && zoneResults.length > 0} />
 
       {/* Layer mode toggle */}
-      <div className="pointer-events-auto absolute right-16 top-[80px] z-20 gg-layer-toggle">
+      <div className="pointer-events-auto absolute left-4 top-[72px] z-20 gg-layer-toggle">
         {(['zones', 'both', 'cities'] as const).map((mode) => (
           <button
             key={mode}
